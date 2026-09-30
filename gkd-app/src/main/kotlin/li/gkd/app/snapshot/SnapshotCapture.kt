@@ -1,6 +1,8 @@
 package li.gkd.app.snapshot
 
 import android.graphics.Bitmap
+import li.gkd.app.feature.ai.AiConversation
+import li.gkd.app.feature.ai.AiConversationStore
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -316,6 +318,10 @@ object SnapshotCapture {
             toast(toastText, forced = true)
             if (storeFlow.value.aiEnable) {
                 appScope.launchLogged {
+                    // 在工作台登记该快照的 AI 会话，便于追溯
+                    AiConversationStore.upsert(
+                        AiConversation(snapshotId = snapshot.id, appId = snapshot.appId)
+                    )
                     AiRuleGenerator.generateRule(snapshot.id)
                 }
             }

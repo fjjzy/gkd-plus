@@ -15,6 +15,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
@@ -79,6 +80,9 @@ import li.gkd.app.feature.ai.AiWorkbenchPage
 import li.gkd.app.feature.ai.AiWorkbenchRoute
 import li.gkd.app.feature.ai.AiConversationPage
 import li.gkd.app.feature.ai.AiConversationRoute
+import li.gkd.app.feature.ai.AiSnapshotPickerPage
+import li.gkd.app.feature.ai.AiSnapshotPickerRoute
+import li.gkd.app.feature.ai.AiPendingNav
 
 private val editorTransitions = NavDisplay.transitionSpec {
     (slideInVertically(tween(250)) { it / 8 } + fadeIn(tween(250))) togetherWith fadeOut(tween(150))
@@ -99,6 +103,7 @@ private val mainRouteEntryProvider = entryProvider {
     entry<AdvancedPageRoute> { AdvancedPage() }
     entry<AiWorkbenchRoute> { AiWorkbenchPage() }
     entry<AiConversationRoute> { AiConversationPage(it) }
+    entry<AiSnapshotPickerRoute> { AiSnapshotPickerPage(it) }
     entry<PrivilegeServiceRoute> { PrivilegeServicePage() }
     entry<SnapshotPageRoute> { SnapshotPage() }
     entry<SnapshotPreviewRoute> { SnapshotPreviewPage(it) }
@@ -126,6 +131,14 @@ private val mainRouteEntryProvider = entryProvider {
 @Composable
 fun MainNavigation() {
     val mainVm = MainViewModel.requireCurrent()
+    // 悬浮窗「我来选择」捕获快照后的待跳转（消费一次）
+    LaunchedEffect(Unit) {
+        AiPendingNav.pendingPickerSnapshotId.collect { pending ->
+            if (pending != null && AiPendingNav.consume() != null) {
+                mainVm.navigatePage(AiSnapshotPickerRoute(pending))
+            }
+        }
+    }
     NavDisplay(
         entryDecorators = listOf(
             rememberSaveableStateHolderNavEntryDecorator(),
