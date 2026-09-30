@@ -75,6 +75,10 @@ import li.gkd.app.ui.home.NotificationTextPage
 import li.gkd.app.ui.home.NotificationTextRoute
 import li.gkd.app.ui.home.BlockA11ySetupRoute
 import li.gkd.app.ui.home.HomeRoute
+import li.gkd.app.feature.ai.AiWorkbenchPage
+import li.gkd.app.feature.ai.AiWorkbenchRoute
+import li.gkd.app.feature.ai.AiConversationPage
+import li.gkd.app.feature.ai.AiConversationRoute
 
 private val editorTransitions = NavDisplay.transitionSpec {
     (slideInVertically(tween(250)) { it / 8 } + fadeIn(tween(250))) togetherWith fadeOut(tween(150))
@@ -93,6 +97,8 @@ private val mainRouteEntryProvider = entryProvider {
     entry<BlockA11ySetupRoute>(metadata = editorTransitions) { BlockA11ySetupPage() }
     entry<BlockA11yAppListRoute> { BlockA11yAppListPage() }
     entry<AdvancedPageRoute> { AdvancedPage() }
+    entry<AiWorkbenchRoute> { AiWorkbenchPage() }
+    entry<AiConversationRoute> { AiConversationPage(it) }
     entry<PrivilegeServiceRoute> { PrivilegeServicePage() }
     entry<SnapshotPageRoute> { SnapshotPage() }
     entry<SnapshotPreviewRoute> { SnapshotPreviewPage(it) }

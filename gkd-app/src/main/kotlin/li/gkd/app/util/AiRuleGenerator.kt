@@ -30,6 +30,9 @@ import li.gkd.app.data.info2nodeList
 import li.gkd.app.data.settings.AiConfig
 import li.gkd.app.data.snapshot.SnapshotRepository
 import li.gkd.app.data.subscription.SubscriptionRepository
+import li.gkd.app.feature.ai.AiConversation
+import li.gkd.app.feature.ai.AiConversationStore
+import li.gkd.app.feature.ai.AiMessage
 import li.gkd.app.snapshot.SnapshotCapture
 import li.gkd.app.store.AppStore.storeFlow
 import li.gkd.db.LOCAL_SUBS_ID
@@ -214,6 +217,80 @@ object AiRuleGenerator {
         taskQueue.send(snapshotId)
         if (isGenerating.value) {
             ToastUtils.toast("AI 任务已加入队列（排队中：${pendingCount.value}）")
+        }
+    }
+
+    /**
+     * 会话式生成：在工作台/选择器中对某个快照发起带用户要求的生成。
+     * 在 appScope 中运行，退出前台不会失败；每个快照一个会话，可并行。
+     */
+    suspend fun generateConversationRule(snapshotId: Long, userRequirement: String?) {
+        val config = storeFlow.value.aiConfig
+        if (config.apiUrl.isBlank() || config.apiKey.isBlank() || config.model.isBlank()) {
+            AiConversationStore.appendMessage(
+                snapshotId = snapshotId,
+                message = AiMessage(
+                    role = "assistant",
+                    content = "请先配置 AI 规则设置",
+                    time = System.currentTimeMillis(),
+                ),
+                status = AiConversation.STATUS_FAILED,
+            )
+            return
+        }
+        val conversation = AiConversationStore.get(snapshotId)
+        if (conversation == null) {
+            LogUtils.d("AI conversation missing: $snapshotId")
+            return
+        }
+        try {
+            AiConversationStore.updateStatus(snapshotId, AiConversation.STATUS_GENERATING)
+            val prompt = loadPrompt()
+            val snapshotJson = withContext(Dispatchers.IO) {
+                SnapshotRepository.snapshotFile(snapshotId).readText()
+            }
+            val requirementBlock = if (userRequirement.isNullOrBlank()) {
+                ""
+            } else {
+                "\n---\n用户要求：$userRequirement\n"
+            }
+            val userContent = "$prompt$requirementBlock\n$snapshotJson"
+            val result = callAiApi(config, userContent)
+            val ruleText = extractContent(result)
+            val rule = parseAndValidateRule(ruleText)
+            if (rule == null) {
+                AiConversationStore.appendMessage(
+                    snapshotId = snapshotId,
+                    message = AiMessage(
+                        role = "assistant",
+                        content = "生成的规则 JSON 不合法，请调整要求后重试。",
+                        time = System.currentTimeMillis(),
+                    ),
+                    status = AiConversation.STATUS_FAILED,
+                )
+                return
+            }
+            insertRuleToSubscription(rule)
+            AiConversationStore.appendMessage(
+                snapshotId = snapshotId,
+                message = AiMessage(
+                    role = "assistant",
+                    content = "已生成规则并添加到本地订阅：\n${ruleText.take(2000)}",
+                    time = System.currentTimeMillis(),
+                ),
+                status = AiConversation.STATUS_SUCCESS,
+            )
+        } catch (e: Exception) {
+            LogUtils.d("AI conversation generate failed", e)
+            AiConversationStore.appendMessage(
+                snapshotId = snapshotId,
+                message = AiMessage(
+                    role = "assistant",
+                    content = "生成失败：${e.message}",
+                    time = System.currentTimeMillis(),
+                ),
+                status = AiConversation.STATUS_FAILED,
+            )
         }
     }
 

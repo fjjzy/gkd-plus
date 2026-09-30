@@ -269,6 +269,15 @@ fun useDashboardPage(): ScaffoldExt {
             }
 
             PageItemCard(
+                title = "AI 规则工作台",
+                subtitle = "管理 AI 会话，从快照选择组件生成规则",
+                imageVector = GkIcons.AutoMode,
+                onClickLabel = "打开 AI 规则工作台",
+                onClick = {
+                    mainVm.navigatePage(li.gkd.app.feature.ai.AiWorkbenchRoute)
+                })
+
+            PageItemCard(
                 title = UiStrings.gkd_learn_more,
                 subtitle = UiStrings.documentation_description,
                 imageVector = GkIcons.HelpOutline,
