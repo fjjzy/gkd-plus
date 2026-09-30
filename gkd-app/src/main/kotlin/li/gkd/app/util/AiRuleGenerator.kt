@@ -4,9 +4,12 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.preparePost
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
+import io.ktor.utils.io.readUTF8Line
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import kotlinx.coroutines.Dispatchers
@@ -249,13 +252,20 @@ object AiRuleGenerator {
             val snapshotJson = withContext(Dispatchers.IO) {
                 SnapshotRepository.snapshotFile(snapshotId).readText()
             }
-            val requirementBlock = if (userRequirement.isNullOrBlank()) {
+            // 取会话中所有用户消息作为上下文（含「已选中组件…」与用户补充的要求）
+            val userContext = conversation.messages
+                .filter { it.role == "user" }
+                .joinToString("\n") { it.content }
+            val requirementBlock = if (userContext.isBlank()) {
                 ""
             } else {
-                "\n---\n用户要求：$userRequirement\n"
+                "\n---\n用户要求与历史：$userContext\n"
             }
             val userContent = "$prompt$requirementBlock\n$snapshotJson"
-            val result = callAiApi(config, userContent)
+            // 流式生成：每个 delta 追加到会话最后一条 assistant 消息（实时渲染）
+            val result = callAiApiStream(config, userContent) { delta ->
+                AiConversationStore.appendToLastMessage(snapshotId, delta)
+            }
             val ruleText = extractContent(result)
             val rule = parseAndValidateRule(ruleText)
             if (rule == null) {
@@ -271,14 +281,10 @@ object AiRuleGenerator {
                 return
             }
             insertRuleToSubscription(rule)
-            AiConversationStore.appendMessage(
-                snapshotId = snapshotId,
-                message = AiMessage(
-                    role = "assistant",
-                    content = "已生成规则并添加到本地订阅：\n${ruleText.take(2000)}",
-                    time = System.currentTimeMillis(),
-                ),
-                status = AiConversation.STATUS_SUCCESS,
+            AiConversationStore.updateStatus(
+                snapshotId,
+                AiConversation.STATUS_SUCCESS,
+                lastRule = ruleText,
             )
         } catch (e: Exception) {
             LogUtils.d("AI conversation generate failed", e)
@@ -529,6 +535,97 @@ $snapshotJson
 $previousRule
 
 请分析失败原因，重新选择更准确的目标节点和选择器。"""
+    }
+
+    /**
+     * 流式调用 OpenAI 兼容接口（SSE），逐 delta 回调。
+     * Anthropic 不支持同样的简化路径时由调用方回退非流式。
+     */
+    private suspend fun callAiApiStream(
+        config: AiConfig,
+        userContent: String,
+        onDelta: suspend (String) -> Unit = {},
+    ): String = runCatching {
+        val httpClient = createHttpClient()
+        try {
+            val endpoint = buildApiEndpoint(config)
+            val requestBody = when (config.protocol) {
+                "anthropic" -> json.encodeToString(
+                    AnthropicRequest(
+                        model = config.model,
+                        messages = listOf(AnthropicMessage("user", userContent)),
+                        temperature = config.temperature,
+                        top_p = config.topP,
+                        max_tokens = config.maxTokens,
+                    )
+                )
+                else -> {
+                    val request = ChatRequest(
+                        model = config.model,
+                        messages = listOf(ChatMessage("user", userContent)),
+                        temperature = config.temperature,
+                        top_p = config.topP,
+                        max_tokens = config.maxTokens,
+                    )
+                    val obj = json.parseToJsonElement(json.encodeToString(request))
+                        .jsonObject.toMutableMap()
+                    obj["stream"] = kotlinx.serialization.json.JsonPrimitive(true)
+                    json.encodeToString(
+                        kotlinx.serialization.json.JsonObject(obj)
+                    )
+                }
+            }
+            val full = StringBuilder()
+            httpClient.preparePost(endpoint) {
+                when (config.protocol) {
+                    "anthropic" -> {
+                        header("x-api-key", config.apiKey)
+                        header("anthropic-version", "2023-06-01")
+                    }
+                    else -> header("Authorization", "Bearer ${config.apiKey}")
+                }
+                contentType(ContentType.Application.Json)
+                setBody(requestBody)
+            }.execute { response ->
+                val bodyChannel = response.bodyAsChannel()
+                while (!bodyChannel.isClosedForRead) {
+                    val line = bodyChannel.readUTF8Line() ?: break
+                    if (!line.startsWith("data:")) continue
+                    val data = line.removePrefix("data:").trim()
+                    if (data == "[DONE]") break
+                    val deltaText = runCatching {
+                        val element = json.parseToJsonElement(data)
+                        when (config.protocol) {
+                            "anthropic" -> {
+                                val type = element.jsonObject["type"]?.jsonPrimitive?.content
+                                if (type == "content_block_delta") {
+                                    element.jsonObject["delta"]?.jsonObject?.get("text")
+                                        ?.jsonPrimitive?.content
+                                } else {
+                                    null
+                                }
+                            }
+                            else -> {
+                                element.jsonObject["choices"]?.jsonArray?.firstOrNull()
+                                    ?.jsonObject?.get("delta")?.jsonObject?.get("content")
+                                    ?.jsonPrimitive?.content
+                            }
+                        }
+                    }.getOrNull() ?: continue
+                    if (deltaText != null) {
+                        full.append(deltaText)
+                        onDelta(deltaText)
+                    }
+                }
+            }
+            full.toString()
+        } finally {
+            httpClient.close()
+        }
+    }.getOrElse { e ->
+        // 不支持流式（接口不支持/代理剥离 SSE），回退整体返回
+        LogUtils.d("AI stream failed, fallback to non-stream: ${e.message}")
+        callAiApi(config, userContent)
     }
 
     private suspend fun callAiApi(config: AiConfig, userContent: String): String {

@@ -100,6 +100,39 @@ object AiConversationStore {
         }
     }
 
+    /**
+     * 流式更新最后一条消息的内容（追加），用于 SSE 增量渲染。
+     */
+    suspend fun appendToLastMessage(
+        snapshotId: Long,
+        delta: String,
+        role: String = "assistant",
+    ) = mutationMutex.withLock {
+        val current = conversationsFlow.value
+        conversationsFlow.value = current.map { conversation ->
+            if (conversation.snapshotId == snapshotId) {
+                val messages = conversation.messages
+                if (messages.isNotEmpty() && messages.last().role == role) {
+                    conversation.copy(
+                        messages = messages.subList(0, messages.size - 1) + messages.last().copy(
+                            content = messages.last().content + delta,
+                        ),
+                    )
+                } else {
+                    conversation.copy(
+                        messages = messages + AiMessage(
+                            role = role,
+                            content = delta,
+                            time = System.currentTimeMillis(),
+                        ),
+                    )
+                }
+            } else {
+                conversation
+            }
+        }
+    }
+
     suspend fun delete(snapshotId: Long) = mutationMutex.withLock {
         conversationsFlow.value =
             conversationsFlow.value.filter { it.snapshotId != snapshotId }

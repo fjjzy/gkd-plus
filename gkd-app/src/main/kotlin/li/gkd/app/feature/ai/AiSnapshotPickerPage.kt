@@ -1,6 +1,8 @@
 package li.gkd.app.feature.ai
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,6 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -63,35 +66,75 @@ fun AiSnapshotPickerPage(route: AiSnapshotPickerRoute) {
             )
         },
         bottomBar = {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
             ) {
-                TextButton(onClick = throttle { mainVm.popPage() }) {
-                    Text(text = "算了")
+                selectedNode?.let { node ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = node.attr.text ?: node.attr.desc ?: node.attr.id ?: "(无文本)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = "${node.attr.name} (${node.attr.left},${node.attr.top},${node.attr.right},${node.attr.bottom})",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
-                TextButton(
-                    enabled = selectedNode != null,
-                    onClick = throttle {
-                        val appId = snapshot?.appId ?: return@throttle
-                        val node = selectedNode ?: return@throttle
-                        vm.startConversation(route.snapshotId, appId, node)
-                        mainVm.navigatePage(AiConversationRoute(route.snapshotId))
-                    },
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Text(text = "对话生成")
-                }
-                TextButton(
-                    enabled = selectedNode != null,
-                    onClick = throttle {
-                        val node = selectedNode ?: return@throttle
-                        vm.generateDirect(route.snapshotId, node)
-                        mainVm.popPage()
-                    },
-                ) {
-                    Text(text = "直接生成")
+                    TextButton(onClick = throttle { mainVm.popPage() }) {
+                        Text(text = "算了")
+                    }
+                    TextButton(
+                        enabled = selectedNode != null,
+                        onClick = { onNodeChange(expandSelection(nodes, selectedNode)) },
+                    ) {
+                        Text(text = "扩大选中")
+                    }
+                    TextButton(
+                        enabled = selectedNode != null,
+                        onClick = { onNodeChange(shrinkSelection(nodes, selectedNode)) },
+                    ) {
+                        Text(text = "缩小选中")
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
+                    TextButton(
+                        enabled = selectedNode != null,
+                        onClick = throttle {
+                            val appId = snapshot?.appId ?: return@throttle
+                            val node = selectedNode ?: return@throttle
+                            vm.startConversation(route.snapshotId, appId, node)
+                            mainVm.navigatePage(AiConversationRoute(route.snapshotId))
+                        },
+                    ) {
+                        Text(text = "对话生成")
+                    }
+                    TextButton(
+                        enabled = selectedNode != null,
+                        onClick = throttle {
+                            val node = selectedNode ?: return@throttle
+                            vm.generateDirect(route.snapshotId, node)
+                            mainVm.popPage()
+                        },
+                    ) {
+                        Text(text = "直接生成")
+                    }
                 }
             }
         },
@@ -100,7 +143,8 @@ fun AiSnapshotPickerPage(route: AiSnapshotPickerRoute) {
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(contentPadding),
+                .padding(contentPadding)
+                .padding(horizontal = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             SnapshotNodeSelector(
@@ -110,49 +154,11 @@ fun AiSnapshotPickerPage(route: AiSnapshotPickerRoute) {
                 screenHeight = snapshot?.screenHeight ?: 0,
                 selectedNode = selectedNode,
                 onSelectedNodeChange = onNodeChange,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                TextButton(
-                    enabled = selectedNode != null,
-                    onClick = { onNodeChange(expandSelection(nodes, selectedNode)) },
-                ) {
-                    Text(text = "扩大选中")
-                }
-                TextButton(
-                    enabled = selectedNode != null,
-                    onClick = { onNodeChange(shrinkSelection(nodes, selectedNode)) },
-                ) {
-                    Text(text = "缩小选中")
-                }
-            }
-            selectedNode?.let { node ->
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text(
-                        text = node.attr.text ?: node.attr.desc ?: node.attr.id ?: "(无文本)",
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = "${node.attr.name} (${node.attr.left},${node.attr.top},${node.attr.right},${node.attr.bottom})",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
+                    .clip(MaterialTheme.shapes.medium)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+            )
             GkPageBottomSpace()
         }
     }

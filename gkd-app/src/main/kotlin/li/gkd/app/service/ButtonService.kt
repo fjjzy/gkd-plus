@@ -3,10 +3,12 @@ package li.gkd.app.service
 import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -92,12 +94,19 @@ class ButtonService : OverlayWindowService(
         val showMenu by menuVisible.collectAsStateWithLifecycle()
         val bgColor = MaterialTheme.colorScheme.surfaceContainerHigh
         if (showMenu) {
+            // 菜单放在按钮上方，收窄宽度（IntrinsicSize.Max），避免遮挡按钮
             Column(
+                horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
                 modifier = Modifier
+                    .width(IntrinsicSize.Max)
+                    .padding(bottom = 8.dp)
                     .clip(MaterialTheme.shapes.medium)
                     .background(bgColor)
                     .padding(4.dp),
             ) {
+                MenuItem(text = "算了") {
+                    lifecycleScope.launchUi { menuVisible.value = false }
+                }
                 MenuItem(text = "快速识别") {
                     lifecycleScope.launchUi { quickCapture() }
                 }
@@ -126,7 +135,7 @@ class ButtonService : OverlayWindowService(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(onClick = onClick)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
         )
     }
 

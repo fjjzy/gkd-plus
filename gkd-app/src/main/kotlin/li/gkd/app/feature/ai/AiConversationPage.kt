@@ -2,17 +2,18 @@ package li.gkd.app.feature.ai
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -54,7 +55,7 @@ fun AiConversationPage(route: AiConversationRoute) {
     val current = conversation.find { it.snapshotId == route.snapshotId }
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
-    LaunchedEffect(current?.messages?.size) {
+    LaunchedEffect(current?.messages?.size, current?.messages?.lastOrNull()?.content?.length) {
         if ((current?.messages?.size ?: 0) > 0) {
             listState.animateScrollToItem(current!!.messages.size - 1)
         }
@@ -81,34 +82,39 @@ fun AiConversationPage(route: AiConversationRoute) {
             )
         },
         bottomBar = {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .imePadding()
+                    .navigationBarsPadding()
                     .background(MaterialTheme.colorScheme.surfaceContainer)
                     .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 OutlinedTextField(
                     value = input,
                     onValueChange = { input = it },
                     placeholder = { Text(text = "输入你的要求") },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
                     maxLines = 4,
                 )
-                TextButton(
-                    onClick = throttle {
-                        val text = input.trim()
-                        if (text.isNotEmpty() && current != null) {
-                            input = ""
-                            vm.sendUserMessage(route.snapshotId, text)
-                        }
-                    },
-                    enabled = input.isNotBlank() && current != null &&
-                        current.status != AiConversation.STATUS_GENERATING,
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
                 ) {
-                    Text(text = "发送")
+                    TextButton(
+                        onClick = throttle {
+                            val text = input.trim()
+                            if (text.isNotEmpty() && current != null) {
+                                input = ""
+                                vm.sendUserMessage(route.snapshotId, text)
+                            }
+                        },
+                        enabled = input.isNotBlank() && current != null &&
+                            current.status != AiConversation.STATUS_GENERATING,
+                    ) {
+                        Text(text = "发送")
+                    }
                 }
             }
         },
