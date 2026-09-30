@@ -53,6 +53,8 @@ import li.gkd.app.priv.PrivilegeServiceStatus
 import li.gkd.app.priv.privilegeContextFlow
 import li.gkd.app.priv.privilegeServiceStatusFlow
 import li.gkd.app.priv.uiAutomationFlow
+import li.gkd.app.service.ButtonService
+import li.gkd.app.platform.service.ServiceController
 import li.gkd.app.service.A11yService
 import li.gkd.app.service.ActivityService
 import li.gkd.app.service.StatusService
@@ -267,6 +269,34 @@ fun useDashboardPage(): ScaffoldExt {
                         mainVm.navigatePage(ActivityLogRoute)
                     })
             }
+
+            val buttonServiceRunning by ButtonService.isRunning.collectAsStateWithLifecycle()
+            PageSwitchItemCard(
+                imageVector = GkIcons.AutoMode,
+                title = "启用 AI 规则",
+                subtitle = "捕获快照后自动调用大模型生成订阅规则",
+                checked = store.aiEnable,
+                onCheckedChange = vm::setAiEnable,
+            )
+
+            PageSwitchItemCard(
+                imageVector = GkIcons.CenterFocusWeak,
+                title = UiStrings.snapshot_button_label,
+                subtitle = UiStrings.snapshot_button_description,
+                checked = buttonServiceRunning,
+                onCheckedChange = { enabled ->
+                    vm.scope.launchUi {
+                        if (!enabled || mainVm.permissionRequests.ensurePermissions(
+                                PermissionStates.foregroundServiceSpecialUse,
+                                PermissionStates.notification,
+                                PermissionStates.drawOverlays,
+                            )
+                        ) {
+                            ServiceController.setSnapshotButtonEnabled(enabled)
+                        }
+                    }
+                },
+            )
 
             PageItemCard(
                 title = "AI 规则工作台",

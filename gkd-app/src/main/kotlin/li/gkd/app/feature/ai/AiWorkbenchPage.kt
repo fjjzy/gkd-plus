@@ -22,18 +22,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation3.runtime.NavKey
 import kotlinx.serialization.Serializable
 import li.gkd.app.MainViewModel
-import li.gkd.app.permission.PermissionStates
-import li.gkd.app.platform.service.ServiceController
-import li.gkd.app.service.ButtonService
-import li.gkd.app.store.AppStore.storeFlow
-import li.gkd.app.text.UiStrings
 import li.gkd.app.ui.component.GkEmptyState
 import li.gkd.app.ui.component.GkIconButton
 import li.gkd.app.ui.component.GkIcons
 import li.gkd.app.ui.component.GkPageBottomSpace
-import li.gkd.app.ui.component.GkTextSwitch
 import li.gkd.app.ui.component.GkTopAppBar
-import li.gkd.app.ui.share.launchUiAction
 import li.gkd.app.ui.style.itemHorizontalPadding
 import li.gkd.app.util.TimeUtils.throttle
 import java.text.SimpleDateFormat
@@ -46,10 +39,7 @@ data object AiWorkbenchRoute : NavKey
 @Composable
 fun AiWorkbenchPage() {
     val mainVm = MainViewModel.requireCurrent()
-    val vm = androidx.lifecycle.viewmodel.compose.viewModel<AiWorkbenchVm>()
-    val store by storeFlow.collectAsStateWithLifecycle()
     val conversations by AiConversationStore.conversationsFlow.collectAsStateWithLifecycle()
-    val buttonServiceRunning by ButtonService.isRunning.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -75,31 +65,6 @@ fun AiWorkbenchPage() {
             ),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            item(key = "toggles") {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    GkTextSwitch(
-                        title = "启用 AI 规则",
-                        subtitle = "捕获快照后自动调用大模型生成订阅规则",
-                        checked = store.aiEnable,
-                        onCheckedChange = vm::setAiEnable,
-                    )
-                    GkTextSwitch(
-                        title = UiStrings.snapshot_button_label,
-                        subtitle = UiStrings.snapshot_button_description,
-                        checked = buttonServiceRunning,
-                        onCheckedChange = vm.scope.launchUiAction { enabled ->
-                            if (!enabled || mainVm.permissionRequests.ensurePermissions(
-                                    PermissionStates.foregroundServiceSpecialUse,
-                                    PermissionStates.notification,
-                                    PermissionStates.drawOverlays,
-                                )
-                            ) {
-                                ServiceController.setSnapshotButtonEnabled(enabled)
-                            }
-                        },
-                    )
-                }
-            }
             if (conversations.isEmpty()) {
                 item(key = "empty") {
                     Column {
