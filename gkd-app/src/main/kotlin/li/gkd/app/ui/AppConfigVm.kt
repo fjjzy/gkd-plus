@@ -24,12 +24,20 @@ import li.gkd.app.store.AppStore
 import li.gkd.app.ui.share.BaseViewModel
 import li.gkd.app.util.MutexState
 import li.gkd.app.util.RuleSortOption
+import li.gkd.app.util.ToastUtils.toast
 import li.gkd.app.util.toJson5String
+import li.gkd.app.data.SubscriptionInputParser
+import li.gkd.app.data.edit
 import li.gkd.db.ActionLog
 import li.gkd.db.Db
+import li.gkd.db.LOCAL_SUBS_ID
 import li.gkd.db.RuleGroupType
 import li.gkd.db.SubsItem
 import li.gkd.db.SubscriptionConfigSnapshot
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 
 data class AppRuleSubscription(val subsItem: SubsItem, val subscription: RawSubscription)
 
@@ -117,5 +125,55 @@ class AppConfigVm(
                 )
             )
         }
+
+    /**
+     * 简易规则：根据定位文字 / 控件 ID 生成一条规则并追加到本地订阅。
+     * [backToClose] 为 true 时动作为返回键关闭，否则为点击匹配到的元素。
+     * 返回错误信息；成功时返回 null 并提示。
+     */
+    suspend fun addSimpleRule(text: String, id: String, backToClose: Boolean): String? {
+        val trimmedId = id.trim()
+        val trimmedText = text.trim()
+        val selector = when {
+            trimmedId.isNotEmpty() -> "[id=\"${escapeSelectorValue(trimmedId)}\"]"
+            trimmedText.isNotEmpty() -> "[text=\"${escapeSelectorValue(trimmedText)}\"]"
+            else -> return UiStrings.simple_rule_input_required
+        }
+        val action = if (backToClose) "back" else "click"
+        val group = runCatching {
+            val groupJson = buildJsonObject {
+                put("name", trimmedText.ifEmpty { trimmedId })
+                putJsonArray("rules") {
+                    addJsonObject {
+                        put("matches", selector)
+                        put("action", action)
+                    }
+                }
+            }
+            SubscriptionInputParser.parse(groupJson.toString()).parseAppGroups(route.appId).first()
+        }.getOrElse { return it.message ?: UiStrings.simple_rule_input_required }
+
+        requiredSubscription(LOCAL_SUBS_ID).update { subscription ->
+            val existingNames = subscription.getApp(route.appId).groups.map { it.name }.toSet()
+            val baseName = group.name
+            var uniqueName = baseName
+            var index = 2
+            while (uniqueName in existingNames) {
+                uniqueName = "$baseName-$index"
+                index += 1
+            }
+            subscription.edit {
+                appendAppGroups(
+                    targetApp = subscription.getApp(route.appId),
+                    groups = listOf(group.copy(name = uniqueName)),
+                )
+            }
+        }
+        toast(UiStrings.simple_rule_added)
+        return null
+    }
+
+    private fun escapeSelectorValue(value: String): String =
+        value.replace("\\", "\\\\").replace("\"", "\\\"")
 
 }

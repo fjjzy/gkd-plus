@@ -4,11 +4,16 @@ import li.gkd.app.ui.component.GkPageBottomSpace
 import li.gkd.app.MainViewModel
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -22,9 +27,11 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavKey
@@ -51,6 +58,7 @@ import li.gkd.app.util.TimeUtils.throttle
 import li.gkd.db.ActionLog
 import li.gkd.db.LOCAL_SUBS_ID
 import li.gkd.app.ui.component.GkAnimatedFloatingActionButton
+import li.gkd.app.ui.component.GkIcon
 import li.gkd.app.ui.component.GkAppNameText
 import li.gkd.app.ui.component.GkRuleListHeader
 import li.gkd.app.ui.component.GkBatchActionMenuItem
@@ -85,6 +93,8 @@ fun AppConfigPage(route: AppConfigRoute) {
     val mainVm = MainViewModel.requireCurrent()
     val vm = viewModel { AppConfigVm(route) }
     val scope = vm.scope
+    var addMenuExpanded by remember { mutableStateOf(false) }
+    var showSimpleRuleDialog by remember { mutableStateOf(false) }
     val batchBusy by vm.batchBusyFlow.collectAsStateWithLifecycle()
 
     val store by storeFlow.collectAsStateWithLifecycle()
@@ -140,6 +150,9 @@ fun AppConfigPage(route: AppConfigRoute) {
     BackHandler(isSelectedMode) {
         selectionState.clear()
     }
+    BackHandler(addMenuExpanded) {
+        addMenuExpanded = false
+    }
 
     val updateSelected: (RuleSetting) -> Unit = { setting ->
         val enabled = setting.value
@@ -189,6 +202,18 @@ fun AppConfigPage(route: AppConfigRoute) {
         firstLoading,
         enabled = !focus.pending,
     )
+
+    if (showSimpleRuleDialog) {
+        SimpleRuleDialog(
+            onDismissRequest = { showSimpleRuleDialog = false },
+            onSubmit = { text, id, backToClose ->
+                showSimpleRuleDialog = false
+                scope.launchUi {
+                    vm.addSimpleRule(text, id, backToClose)?.let { toast(it) }
+                }
+            },
+        )
+    }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -273,20 +298,46 @@ fun AppConfigPage(route: AppConfigRoute) {
             )
         },
         floatingActionButton = {
-            GkAnimatedFloatingActionButton(
-                visible = !isSelectedMode,
-                onClick = {
-                    mainVm.navigatePage(
-                        UpsertRuleGroupRoute(
-                            subsId = LOCAL_SUBS_ID,
-                            groupKey = null,
-                            appId = appId
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                AnimatedVisibility(visible = addMenuExpanded && !isSelectedMode) {
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        ExtendedFloatingActionButton(
+                            text = { Text(text = UiStrings.rule_add_simple) },
+                            icon = { GkIcon(imageVector = GkIcons.Edit) },
+                            onClick = {
+                                addMenuExpanded = false
+                                showSimpleRuleDialog = true
+                            },
                         )
-                    )
-                },
-                imageVector = GkIcons.Add,
-                contentDescription = UiStrings.rule_add
-            )
+                        ExtendedFloatingActionButton(
+                            text = { Text(text = UiStrings.rule_add_full) },
+                            icon = { GkIcon(imageVector = GkIcons.Add) },
+                            onClick = {
+                                addMenuExpanded = false
+                                mainVm.navigatePage(
+                                    UpsertRuleGroupRoute(
+                                        subsId = LOCAL_SUBS_ID,
+                                        groupKey = null,
+                                        appId = appId
+                                    )
+                                )
+                            },
+                        )
+                    }
+                }
+                GkAnimatedFloatingActionButton(
+                    visible = !isSelectedMode,
+                    onClick = { addMenuExpanded = !addMenuExpanded },
+                    imageVector = if (addMenuExpanded) GkIcons.Close else GkIcons.Add,
+                    contentDescription = UiStrings.rule_add
+                )
+            }
         },
     ) { contentPadding ->
         Column(Modifier.scaffoldPadding(contentPadding)) {

@@ -1,6 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name" debug_suffix="true">GKD-Plus</string>
+    <string name="rule_add_simple">简易规则</string>
+    <string name="rule_add_full">完整规则</string>
+    <string name="simple_rule_title">简易规则</string>
+    <string name="simple_rule_text_label">文字</string>
+    <string name="simple_rule_id_label">ID</string>
+    <string name="simple_rule_text_hint">用于定位弹窗的文字</string>
+    <string name="simple_rule_id_hint">用于定位弹窗的控件 ID</string>
+    <string name="simple_rule_back_close">通过返回键关闭</string>
+    <string name="simple_rule_back_close_desc">开启后按返回键关闭弹窗；关闭则点击匹配到的元素</string>
+    <string name="simple_rule_cancel">算了</string>
+    <string name="simple_rule_example">举例</string>
+    <string name="simple_rule_add">新增</string>
+    <string name="simple_rule_input_required">请至少填写文字或 ID</string>
+    <string name="simple_rule_added">已新增一条规则</string>
+    <string name="simple_rule_example_title">输入示例</string>
+    <string name="simple_rule_example_content">文字：弹窗上出现的文字，如「跳过」「关闭」「我知道了」。\nID：控件的 resource-id，如 com.example:id/close（优先于文字）。\n\n生成规则：界面出现匹配元素时\n- 未开启返回键关闭 → 点击该元素\n- 开启返回键关闭 → 按返回键\n\n例：文字填「跳过」，即可自动点击「跳过」按钮。</string>
     <string name="a11y_desc">基于高级选择器和订阅规则的屏幕自定义点击服务\n\n通过自定义选择器和订阅规则，能帮助你实现点击任意位置控件，自定义快捷操作等高级功能</string>
     <string name="import_backup" debug_suffix="true">导入备份</string>
     <string name="capture_snapshot" debug_suffix="true">捕获快照</string>
