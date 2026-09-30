@@ -74,7 +74,8 @@ class ButtonService : OverlayWindowService(
     private suspend fun pickAndCapture() {
         menuVisible.value = false
         withAllOverlaysHidden {
-            val snapshot = SnapshotCapture.capture()
+            // keepStatusBar：组件选择器需要节点坐标与截图逐像素对齐，不裁剪状态栏
+            val snapshot = SnapshotCapture.capture(keepStatusBar = true)
             // 记录待导航快 App并跳转悬浮窗内输入兼容性差）
             AiPendingNav.pendingPickerSnapshotId.value = snapshot.id
             val intent = Intent(app, MainActivity::class.java).apply {
