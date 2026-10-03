@@ -11,8 +11,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -27,6 +30,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -140,6 +144,41 @@ fun AiConversationPage(route: AiConversationRoute) {
                 }
                 item(key = "bottom-space") { GkPageBottomSpace() }
             }
+            }
+            // 已选组件 chips：输入栏上方，可单个移除
+            if (!current?.selectedComponents.isNullOrEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceContainer)
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 12.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    current!!.selectedComponents.forEachIndexed { index, comp ->
+                        Row(
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                .padding(start = 10.dp),
+                        ) {
+                            Text(
+                                text = comp.displayText(),
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            GkIconButton(
+                                imageVector = GkIcons.Close,
+                                contentDescription = "移除 ${'$'}{comp.displayText()}",
+                                modifier = Modifier.size(28.dp),
+                                onClick = { vm.removeSelectedComponent(route.snapshotId, index) },
+                            )
+                        }
+                    }
+                }
             }
             // 输入栏：仅 imePadding 让位（App 内已验证模式），键盘弹出时紧贴键盘
             Row(

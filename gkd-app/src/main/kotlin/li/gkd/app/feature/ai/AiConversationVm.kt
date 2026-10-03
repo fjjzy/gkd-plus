@@ -10,6 +10,19 @@ import li.gkd.app.util.launchLogged
 
 class AiConversationVm : BaseViewModel() {
 
+    fun removeSelectedComponent(snapshotId: Long, index: Int) {
+        scope.launchUi {
+            val current = AiConversationStore.get(snapshotId)
+            val components = current?.selectedComponents.orEmpty()
+            if (index in components.indices) {
+                AiConversationStore.setSelectedComponents(
+                    snapshotId,
+                    components.filterIndexed { i, _ -> i != index },
+                )
+            }
+        }
+    }
+
     fun sendUserMessage(snapshotId: Long, text: String) {
         scope.launchUi {
             val existing = AiConversationStore.get(snapshotId)

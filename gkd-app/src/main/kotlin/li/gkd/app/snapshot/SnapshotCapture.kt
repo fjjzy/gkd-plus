@@ -241,6 +241,7 @@ object SnapshotCapture {
     suspend fun capture(
         forcedCropStatusBar: Boolean = false,
         keepStatusBar: Boolean = false,
+        triggerAiRule: Boolean = true,
     ): ComplexSnapshot {
         val service = A11yRuntime.service ?: throw RpcError(UiStrings.service_unavailable_authorize)
         if (!captureMutex.tryLock()) {
@@ -321,7 +322,7 @@ object SnapshotCapture {
                 UiStrings.snapshot_saved_warning(statusDetail)
             }
             toast(toastText, forced = true)
-            if (storeFlow.value.aiEnable) {
+            if (triggerAiRule && storeFlow.value.aiEnable) {
                 appScope.launchLogged {
                     // 在工作台登记该快照的 AI 会话，便于追溯
                     AiConversationStore.upsert(

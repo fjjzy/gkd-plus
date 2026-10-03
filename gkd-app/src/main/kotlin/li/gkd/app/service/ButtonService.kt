@@ -47,19 +47,15 @@ class ButtonService : OverlayWindowService(
             val gap = now - lastClickTime
             lastClickTime = now
             if (gap < 400) {
-                // 双击 → 加强模式
+                // 双击 → 加强模式（并关掉弹出的菜单）
                 menuVisible.value = false
                 lastClickTime = 0L
                 withAllOverlaysHidden {
                     AiRuleGenerator.enhancedGenerate()
                 }
             } else {
-                // 等待判断是否双击
-                delay(400)
-                if (lastClickTime == now) {
-                    // 单击 → 展开快照触发菜单（快速识别 / 我来选择）
-                    menuVisible.value = !menuVisible.value
-                }
+                // 单击 → 立即展开菜单（不等待双击判定，避免迟滞感）
+                menuVisible.value = !menuVisible.value
             }
         }
     }
@@ -76,8 +72,11 @@ class ButtonService : OverlayWindowService(
     private suspend fun pickAndCapture() {
         menuVisible.value = false
         withAllOverlaysHidden {
-            // keepStatusBar：组件选择器需要节点坐标与截图逐像素对齐，不裁剪状态栏
-            val snapshot = SnapshotCapture.capture(keepStatusBar = true)
+            // keepStatusBar：选择器需坐标对齐；triggerAiRule=false：选完组件再决定生成
+            val snapshot = SnapshotCapture.capture(
+                keepStatusBar = true,
+                triggerAiRule = false,
+            )
             // 记录待导航快 App并跳转悬浮窗内输入兼容性差）
             AiPendingNav.pendingPickerSnapshotId.value = snapshot.id
             val intent = Intent(app, MainActivity::class.java).apply {
@@ -94,21 +93,27 @@ class ButtonService : OverlayWindowService(
         val showMenu by menuVisible.collectAsStateWithLifecycle()
         val bgColor = MaterialTheme.colorScheme.surfaceContainerHigh
         val alpha = 0.75f
-        // 基类把本方法放进 Box 中：必须只输出一个根节点，
-        // 否则菜单与按钮图标会叠加在一起（Box 子元素默认叠放在起点）。
-        Column(
-            horizontalAlignment = androidx.compose.ui.Alignment.End,
+        // 基类把本方法放进 Box 中：必须只输出一个根节点。
+        // 3 个选项横排在按钮右侧，按钮图标保持不变。
+        androidx.compose.foundation.layout.Row(
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
         ) {
+            GkIcon(
+                imageVector = GkIcons.CenterFocusWeak,
+                modifier = Modifier
+                    .clip(MaterialTheme.shapes.small)
+                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = alpha))
+                    .size(40.dp),
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = alpha),
+            )
             if (showMenu) {
-                // 菜单展开在按钮正上方（同一 Column 内，不会遮挡按钮）
-                Column(
-                    horizontalAlignment = androidx.compose.ui.Alignment.End,
+                androidx.compose.foundation.layout.Row(
                     modifier = Modifier
-                        .width(IntrinsicSize.Max)
-                        .padding(bottom = 4.dp)
+                        .padding(start = 8.dp)
                         .clip(MaterialTheme.shapes.medium)
                         .background(bgColor)
-                        .padding(4.dp),
+                        .padding(horizontal = 2.dp, vertical = 2.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                 ) {
                     MenuItem(text = "算了") {
                         lifecycleScope.launchUi { menuVisible.value = false }
@@ -121,14 +126,6 @@ class ButtonService : OverlayWindowService(
                     }
                 }
             }
-            GkIcon(
-                imageVector = GkIcons.CenterFocusWeak,
-                modifier = Modifier
-                    .clip(MaterialTheme.shapes.small)
-                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = alpha))
-                    .size(40.dp),
-                tint = MaterialTheme.colorScheme.primary.copy(alpha = alpha),
-            )
         }
     }
 
@@ -139,9 +136,9 @@ class ButtonService : OverlayWindowService(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier
-                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.small)
                 .clickable(onClick = onClick)
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 10.dp, vertical = 10.dp),
         )
     }
 

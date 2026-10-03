@@ -13,6 +13,33 @@ data class AiMessage(
     val time: Long,
 )
 
+/**
+ * 会话中选中的目标组件（精简后的节点信息，可序列化持久化）
+ */
+@Serializable
+data class AiSelectedComponent(
+    val text: String? = null,
+    val desc: String? = null,
+    val vid: String? = null,
+    val name: String? = null,
+    val bounds: String = "",
+) {
+    /**
+     * 展示文本：组件 text 若全是私用区字符（应用自定义 emoji），渲染会变成问号，
+     * 此时降级用 desc / vid 标识。
+     */
+    fun displayText(): String {
+        val t = text?.takeIf { it.isNotBlank() && it.any { ch -> ch !in '\uE000'..'\uF8FF' } }
+        return when {
+            !t.isNullOrBlank() -> t
+            !desc.isNullOrBlank() -> desc
+            !vid.isNullOrBlank() -> "id=$vid"
+            text?.isNotBlank() == true -> "表情图标($bounds)"
+            else -> "组件($bounds)"
+        }
+    }
+}
+
 @Serializable
 data class AiConversation(
     val snapshotId: Long,
@@ -21,6 +48,7 @@ data class AiConversation(
     val status: String = STATUS_IDLE,
     val lastRule: String? = null,
     val updateTime: Long = 0L,
+    val selectedComponents: List<AiSelectedComponent> = emptyList(),
 ) {
     companion object {
         const val STATUS_IDLE = "idle"
@@ -137,6 +165,22 @@ object AiConversationStore {
     suspend fun delete(snapshotId: Long) = mutationMutex.withLock {
         AppStore.updateAiConversations { current ->
             current.filter { it.snapshotId != snapshotId }
+        }
+    }
+
+    /** 设置会话选中的目标组件（选择页多选 / chips 删除共用） */
+    suspend fun setSelectedComponents(
+        snapshotId: Long,
+        components: List<AiSelectedComponent>,
+    ) = mutationMutex.withLock {
+        AppStore.updateAiConversations { current ->
+            current.map {
+                if (it.snapshotId == snapshotId) {
+                    it.copy(selectedComponents = components, updateTime = System.currentTimeMillis())
+                } else {
+                    it
+                }
+            }
         }
     }
 }

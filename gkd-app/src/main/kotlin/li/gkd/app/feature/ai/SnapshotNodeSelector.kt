@@ -37,8 +37,8 @@ fun SnapshotNodeSelector(
     nodes: List<NodeInfo>,
     screenWidth: Int,
     screenHeight: Int,
-    selectedNode: NodeInfo?,
-    onSelectedNodeChange: (NodeInfo?) -> Unit,
+    selectedNodes: List<NodeInfo>,
+    onNodeToggle: (NodeInfo) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
@@ -73,6 +73,7 @@ fun SnapshotNodeSelector(
                     detectTapGestures { offset: Offset ->
                         val x = if (scaleX > 0) offset.x / scaleX else offset.x
                         val y = if (scaleY > 0) offset.y / scaleY else offset.y
+                        // 命中最小面积节点：再点选中的节点则取消选择
                         val hit = nodes
                             .filter { it.attr.visibleToUser }
                             .filter { node ->
@@ -80,11 +81,13 @@ fun SnapshotNodeSelector(
                                     node.attr.top <= y && node.attr.bottom >= y
                             }
                             .minByOrNull { it.attr.width * it.attr.height }
-                        onSelectedNodeChange(hit)
+                        if (hit != null) {
+                            onNodeToggle(hit)
+                        }
                     }
                 },
         ) {
-            selectedNode?.let { node ->
+            selectedNodes.forEach { node ->
                 drawRect(
                     color = Color(0xFF2196F3),
                     topLeft = Offset(node.attr.left * scaleX, node.attr.top * scaleY),

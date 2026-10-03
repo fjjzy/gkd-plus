@@ -278,14 +278,30 @@ object AiRuleGenerator {
             val snapshotJson = withContext(Dispatchers.IO) {
                 SnapshotRepository.snapshotFile(snapshotId).readText()
             }
-            // 取会话中所有用户消息作为上下文（含「已选中组件…」与用户补充的要求）
+            // 取会话中所有用户消息作为上下文 + 选中的目标组件
             val userContext = conversation.messages
                 .filter { it.role == "user" }
                 .joinToString("\n") { it.content }
-            val requirementBlock = if (userContext.isBlank()) {
+            val componentsBlock = if (conversation.selectedComponents.isEmpty()) {
                 ""
             } else {
-                "\n---\n用户要求与历史：$userContext\n"
+                val lines = conversation.selectedComponents.mapIndexed { index, c ->
+                    "${index + 1}. text=${c.text ?: "null"} desc=${c.desc ?: "null"} " +
+                        "id=${c.vid ?: c.name ?: "null"} bounds=(${c.bounds})"
+                }
+                "\n---\n用户在快照中选中的目标组件（请针对这些组件生成规则）：\n" +
+                    lines.joinToString("\n") + "\n"
+            }
+            val requirementBlock = buildString {
+                if (componentsBlock.isNotBlank()) append(componentsBlock)
+                if (userContext.isNotBlank()) {
+                    append("\n---\n用户要求与历史：\n")
+                    append(userContext)
+                    append("\n")
+                }
+                if (userRequirement?.isNotBlank() == true) {
+                    append("\n---\n本次要求：$userRequirement\n")
+                }
             }
             val userContent = "$prompt$requirementBlock\n$snapshotJson"
             // 流式生成：每个 delta 追加到会话最后一条 assistant 消息（实时渲染）

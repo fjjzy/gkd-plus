@@ -14,6 +14,14 @@ import li.gkd.app.util.AiRuleGenerator
 import li.gkd.app.util.keepNullJson
 import li.gkd.app.util.launchLogged
 
+fun NodeInfo.toSelectedComponent(): AiSelectedComponent = AiSelectedComponent(
+    text = attr.text,
+    desc = attr.desc,
+    vid = attr.vid ?: attr.id?.substringAfterLast('/', attr.id),
+    name = attr.name,
+    bounds = "${attr.left},${attr.top},${attr.right},${attr.bottom}",
+)
+
 class AiSnapshotPickerVm : BaseViewModel() {
 
     private val snapshotMutable = MutableStateFlow<ComplexSnapshot?>(null)
@@ -36,62 +44,31 @@ class AiSnapshotPickerVm : BaseViewModel() {
     fun screenshotFile(snapshotId: Long) = SnapshotRepository.screenshotFile(snapshotId)
 
     /**
-     * 对话生成：创建/复用该快照的会话，记录选中节点，跳转会话页输入要求
+     * 对话生成：记录选中的组件列表到会话，跳转会话页输入要求
      */
-    fun startConversation(snapshotId: Long, appId: String, node: NodeInfo) {
+    fun startConversation(snapshotId: Long, appId: String, nodes: List<NodeInfo>) {
         scope.launchUi {
-            if (AiConversationStore.get(snapshotId) == null) {
-                AiConversationStore.upsert(
-                    AiConversation(snapshotId = snapshotId, appId = appId)
-                )
-            }
-            AiConversationStore.appendMessage(
-                snapshotId = snapshotId,
-                message = AiMessage(
-                    role = "user",
-                    content = "已选中组件：${nodeDescription(node)}",
-                    time = System.currentTimeMillis(),
-                ),
+            AiRuleLauncher.ensureConversation(snapshotId, appId)
+            AiConversationStore.setSelectedComponents(
+                snapshotId,
+                nodes.map { it.toSelectedComponent() },
             )
         }
     }
 
     /**
-     * 直接生成：把选中节点信息注入 prompt，后台生成规则
+     * 直接生成：记录选中组件列表并后台生成规则
      */
-    fun generateDirect(snapshotId: Long, node: NodeInfo) {
+    fun generateDirect(snapshotId: Long, appId: String, nodes: List<NodeInfo>) {
         scope.launchUi {
-            val appId = snapshotMutable.value?.appId ?: return@launchUi
-            if (AiConversationStore.get(snapshotId) == null) {
-                AiConversationStore.upsert(
-                    AiConversation(snapshotId = snapshotId, appId = appId)
-                )
-            }
-            AiConversationStore.appendMessage(
-                snapshotId = snapshotId,
-                message = AiMessage(
-                    role = "user",
-                    content = "直接生成：目标组件 ${nodeDescription(node)}",
-                    time = System.currentTimeMillis(),
-                ),
-                status = AiConversation.STATUS_GENERATING,
+            AiRuleLauncher.ensureConversation(snapshotId, appId)
+            AiConversationStore.setSelectedComponents(
+                snapshotId,
+                nodes.map { it.toSelectedComponent() },
             )
         }
         appScope.launchLogged {
-            AiRuleGenerator.generateConversationRule(
-                snapshotId,
-                "请针对以下组件生成关闭/点击规则：${nodeDescription(node)}",
-            )
-        }
-    }
-
-    private fun nodeDescription(node: NodeInfo): String {
-        val attr = node.attr
-        return buildString {
-            append(attr.text ?: attr.desc ?: attr.id ?: "(无文本)")
-            attr.vid?.let { append(" [id=$it]") }
-            append(" [name=${attr.name}]")
-            append(" [bounds=${attr.left},${attr.top},${attr.right},${attr.bottom}]")
+            AiRuleGenerator.generateConversationRule(snapshotId, null)
         }
     }
 }
