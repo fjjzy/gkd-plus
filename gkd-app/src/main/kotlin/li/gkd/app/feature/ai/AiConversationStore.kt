@@ -54,6 +54,8 @@ data class AiConversation(
         const val STATUS_IDLE = "idle"
         const val STATUS_GENERATING = "generating"
         const val STATUS_SUCCESS = "success"
+        // 规则已生成但等待用户点「加入规则」
+        const val STATUS_RULE_READY = "rule_ready"
         const val STATUS_FAILED = "failed"
     }
 }

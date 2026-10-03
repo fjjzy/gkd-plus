@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,6 +28,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -52,18 +55,34 @@ fun AiSnapshotPickerPage(route: AiSnapshotPickerRoute) {
     val nodes = snapshot?.nodes.orEmpty()
     // 单选：再次点击已选组件则取消
     var selected by remember { mutableStateOf<NodeInfo?>(null) }
+    // 底部操作面板高度（px），用于推导组件视图高度
+    var panelHeightPx by remember { mutableStateOf(0) }
 
     Scaffold { padding ->
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 // 无顶栏时仍需让出状态栏，否则截图顶进状态栏
                 .statusBarsPadding(),
         ) {
-            // 截图视图：缩小 + 居中，整页一屏不滚动
+            val density = LocalDensity.current
+            // 组件视图高度 = (可用高 - 底部面板高) * 0.9
+            val availableHeightPx = constraints.maxHeight
+            val selectorHeightDp = with(density) {
+                if (panelHeightPx > 0) {
+                    ((availableHeightPx - panelHeightPx) * 0.9f).toDp()
+                } else {
+                    availableHeightPx.toDp()
+                }
+            }
+            // 截图视图：按推导高度展示，恰好位于状态栏下方、底部面板上方
             Box(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(selectorHeightDp)
+                    .clip(MaterialTheme.shapes.medium)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center,
             ) {
                 SnapshotNodeSelector(
@@ -75,18 +94,16 @@ fun AiSnapshotPickerPage(route: AiSnapshotPickerRoute) {
                     onNodeToggle = { node ->
                         selected = if (selected?.id == node.id) null else node
                     },
-                    modifier = Modifier
-                        .fillMaxWidth(0.72f)
-                        .clip(MaterialTheme.shapes.medium)
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
-            // 操作区贴屏幕底部
+            // 底部操作面板：贴屏幕底部，固定不滚动
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .onGloballyPositioned { coords -> panelHeightPx = coords.size.height }
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
@@ -107,7 +124,9 @@ fun AiSnapshotPickerPage(route: AiSnapshotPickerRoute) {
                 }
                 // 紧凑单行按钮：文字不换行；放不下时横向滚动而不是折行
                 Row(
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     TextButton(
@@ -137,7 +156,11 @@ fun AiSnapshotPickerPage(route: AiSnapshotPickerRoute) {
                             val appId = snapshot?.appId ?: return@throttle
                             val node = selected ?: return@throttle
                             vm.startConversation(route.snapshotId, appId, listOf(node))
-                            mainVm.navigatePage(AiConversationRoute(route.snapshotId))
+                            // 替换选择页：聊天页返回时直接回到上一级页面
+                            mainVm.navigatePage(
+                                AiConversationRoute(route.snapshotId),
+                                replaced = true,
+                            )
                         },
                         contentPadding = compactButtonPadding,
                     ) {

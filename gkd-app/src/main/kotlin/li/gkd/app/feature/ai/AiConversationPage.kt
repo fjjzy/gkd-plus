@@ -142,6 +142,15 @@ fun AiConversationPage(route: AiConversationRoute) {
                         )
                     }
                 }
+                if (current.status == AiConversation.STATUS_RULE_READY) {
+                    item(key = "accept-rule") {
+                        androidx.compose.material3.FilledTonalButton(
+                            onClick = throttle { vm.acceptRule(route.snapshotId) },
+                        ) {
+                            Text(text = "加入规则")
+                        }
+                    }
+                }
                 item(key = "bottom-space") { GkPageBottomSpace() }
             }
             }

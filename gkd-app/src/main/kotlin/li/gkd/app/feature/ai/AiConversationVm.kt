@@ -30,15 +30,37 @@ class AiConversationVm : BaseViewModel() {
                 toast("会话不存在")
                 return@launchUi
             }
+            // 选中组件随消息一起进入上下文（消息文本内联），发送后清空选中列表
+            val components = existing.selectedComponents
+            val content = buildString {
+                components.forEach { c ->
+                    append("[选中组件] text=${c.text ?: "null"} desc=${c.desc ?: "null"} ")
+                    append("id=${c.vid ?: c.name ?: "null"} bounds=(${c.bounds})\n")
+                }
+                append(text)
+            }
             AiConversationStore.appendMessage(
                 snapshotId = snapshotId,
-                message = AiMessage(role = "user", content = text, time = System.currentTimeMillis()),
+                message = AiMessage(
+                    role = "user",
+                    content = content,
+                    time = System.currentTimeMillis(),
+                ),
                 status = AiConversation.STATUS_GENERATING,
             )
+            if (components.isNotEmpty()) {
+                AiConversationStore.setSelectedComponents(snapshotId, emptyList())
+            }
         }
         // 生成任务独立于页面生命周期，退到后台/杀页面也不会中断
         appScope.launchLogged {
             AiRuleGenerator.generateConversationRule(snapshotId, text)
+        }
+    }
+
+    fun acceptRule(snapshotId: Long) {
+        appScope.launchLogged {
+            AiRuleGenerator.acceptGeneratedRule(snapshotId)
         }
     }
 }

@@ -57,7 +57,11 @@ fun SnapshotNodeSelector(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .aspectRatio(if (screenHeight > 0) screenWidth.toFloat() / screenHeight else 9f / 16f),
+            .aspectRatio(
+                ratio = if (screenHeight > 0) screenWidth.toFloat() / screenHeight else 9f / 16f,
+                // 外部给定高度时以高度为准推导宽度
+                matchHeightConstraintsFirst = true,
+            ),
     ) {
         AsyncImage(
             model = screenshotModel,

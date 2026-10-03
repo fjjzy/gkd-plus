@@ -345,10 +345,10 @@ object AiRuleGenerator {
                 )
                 return
             }
-            insertRuleToSubscription(rule)
+            // 不自动入库：等待用户在会话里点「加入规则」
             AiConversationStore.updateStatus(
                 snapshotId,
-                AiConversation.STATUS_SUCCESS,
+                AiConversation.STATUS_RULE_READY,
                 lastRule = ruleText,
             )
         } catch (e: Exception) {
@@ -368,6 +368,34 @@ object AiRuleGenerator {
                 status = AiConversation.STATUS_FAILED,
             )
         }
+    }
+
+    /**
+     * 用户点击「加入规则」：把上次生成的规则（conversation.lastRule）真正写入本地订阅。
+     */
+    suspend fun acceptGeneratedRule(snapshotId: Long) {
+        val conversation = AiConversationStore.get(snapshotId) ?: return
+        val ruleText = conversation.lastRule
+        if (conversation.status != AiConversation.STATUS_RULE_READY || ruleText.isNullOrBlank()) {
+            return
+        }
+        val rule = parseAndValidateRule(ruleText)
+        if (rule == null) {
+            ToastUtils.toast("规则数据已失效，请重新生成")
+            AiConversationStore.updateStatus(snapshotId, AiConversation.STATUS_FAILED)
+            return
+        }
+        insertRuleToSubscription(rule)
+        AiConversationStore.appendMessage(
+            snapshotId = snapshotId,
+            message = AiMessage(
+                role = "assistant",
+                content = "已加入本地规则。",
+                time = System.currentTimeMillis(),
+            ),
+            status = AiConversation.STATUS_SUCCESS,
+        )
+        ToastUtils.toast("规则已加入本地订阅")
     }
 
     private suspend fun processRule(snapshotId: Long) {

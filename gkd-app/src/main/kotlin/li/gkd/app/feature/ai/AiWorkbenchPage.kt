@@ -229,6 +229,7 @@ private fun ConversationCard(
                 }
                 val statusText = when (conversation.status) {
                     AiConversation.STATUS_GENERATING -> "生成中..."
+                    AiConversation.STATUS_RULE_READY -> "规则待加入"
                     AiConversation.STATUS_SUCCESS -> "已生成规则"
                     AiConversation.STATUS_FAILED -> "生成失败"
                     else -> if (conversation.messages.isEmpty()) "待发起" else "对话中"
