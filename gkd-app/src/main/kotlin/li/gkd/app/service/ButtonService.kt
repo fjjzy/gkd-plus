@@ -93,37 +93,43 @@ class ButtonService : OverlayWindowService(
     override fun ComposeContent() {
         val showMenu by menuVisible.collectAsStateWithLifecycle()
         val bgColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        if (showMenu) {
-            // 菜单放在按钮上方，收窄宽度（IntrinsicSize.Max），避免遮挡按钮
-            Column(
-                horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .width(IntrinsicSize.Max)
-                    .padding(bottom = 8.dp)
-                    .clip(MaterialTheme.shapes.medium)
-                    .background(bgColor)
-                    .padding(4.dp),
-            ) {
-                MenuItem(text = "算了") {
-                    lifecycleScope.launchUi { menuVisible.value = false }
-                }
-                MenuItem(text = "快速识别") {
-                    lifecycleScope.launchUi { quickCapture() }
-                }
-                MenuItem(text = "我来选择") {
-                    lifecycleScope.launchUi { pickAndCapture() }
+        val alpha = 0.75f
+        // 基类把本方法放进 Box 中：必须只输出一个根节点，
+        // 否则菜单与按钮图标会叠加在一起（Box 子元素默认叠放在起点）。
+        Column(
+            horizontalAlignment = androidx.compose.ui.Alignment.End,
+        ) {
+            if (showMenu) {
+                // 菜单展开在按钮正上方（同一 Column 内，不会遮挡按钮）
+                Column(
+                    horizontalAlignment = androidx.compose.ui.Alignment.End,
+                    modifier = Modifier
+                        .width(IntrinsicSize.Max)
+                        .padding(bottom = 4.dp)
+                        .clip(MaterialTheme.shapes.medium)
+                        .background(bgColor)
+                        .padding(4.dp),
+                ) {
+                    MenuItem(text = "算了") {
+                        lifecycleScope.launchUi { menuVisible.value = false }
+                    }
+                    MenuItem(text = "快速识别") {
+                        lifecycleScope.launchUi { quickCapture() }
+                    }
+                    MenuItem(text = "我来选择") {
+                        lifecycleScope.launchUi { pickAndCapture() }
+                    }
                 }
             }
+            GkIcon(
+                imageVector = GkIcons.CenterFocusWeak,
+                modifier = Modifier
+                    .clip(MaterialTheme.shapes.small)
+                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = alpha))
+                    .size(40.dp),
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = alpha),
+            )
         }
-        val alpha = 0.75f
-        GkIcon(
-            imageVector = GkIcons.CenterFocusWeak,
-            modifier = Modifier
-                .clip(MaterialTheme.shapes.small)
-                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = alpha))
-                .size(40.dp),
-            tint = MaterialTheme.colorScheme.primary.copy(alpha = alpha),
-        )
     }
 
     @Composable
