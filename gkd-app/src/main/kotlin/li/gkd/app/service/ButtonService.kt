@@ -42,22 +42,8 @@ class ButtonService : OverlayWindowService(
 
     override fun onClickView() {
         if (isOverlayContentHidden) return
-        lifecycleScope.launchUi {
-            val now = System.currentTimeMillis()
-            val gap = now - lastClickTime
-            lastClickTime = now
-            if (gap < 400) {
-                // 双击 → 加强模式（并关掉弹出的菜单）
-                menuVisible.value = false
-                lastClickTime = 0L
-                withAllOverlaysHidden {
-                    AiRuleGenerator.enhancedGenerate()
-                }
-            } else {
-                // 单击 → 立即展开菜单（不等待双击判定，避免迟滞感）
-                menuVisible.value = !menuVisible.value
-            }
-        }
+        // 单击：展开/收起菜单
+        menuVisible.value = !menuVisible.value
     }
 
     override fun onLongClickView() = stopSelf()

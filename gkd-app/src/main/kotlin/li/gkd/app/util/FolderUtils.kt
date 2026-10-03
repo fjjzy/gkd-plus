@@ -144,11 +144,26 @@ object FolderUtils {
     }
 
     @WorkerThread
-    fun buildLogFile(): File {
+    fun buildLogFile(snapshotDays: Int = 0): File {
         val tempDir = createGkdTempDir()
         val files = listOf(dbFolder, storeFolder, subsFolder, logFolder, crashFolder).filter {
             it.list()?.isNotEmpty() == true
         }.map { it.copyToLogTemp(tempDir) }.toMutableList()
+        // 附加快照记录(最近 snapshotDays 天)，便于调试快照相关的问题
+        if (snapshotDays > 0) {
+            val snapshotDir = tempDir.resolve("snapshot")
+            if (snapshotDir.mkdir()) {
+                val cutoff = System.currentTimeMillis() - snapshotDays * 24 * 60 * 60 * 1000L
+                snapshotFolder.listFiles()?.forEach { snap ->
+                    if (snap.lastModified() >= cutoff) {
+                        snap.copyRecursively(snapshotDir.resolve(snap.name), overwrite = true)
+                    }
+                }
+                if (snapshotDir.list()?.isNotEmpty() == true) {
+                    files.add(snapshotDir)
+                }
+            }
+        }
         tempDir.resolve("source-paths.txt").also { file ->
             app.assets.open(file.name).use { input ->
                 file.outputStream().use { output ->

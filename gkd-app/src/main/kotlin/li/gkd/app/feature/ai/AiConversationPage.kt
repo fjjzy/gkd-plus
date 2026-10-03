@@ -145,23 +145,19 @@ fun AiConversationPage(route: AiConversationRoute) {
                 item(key = "bottom-space") { GkPageBottomSpace() }
             }
             }
-            // 已选组件 chips：输入栏上方，可单个移除
+            // 已选组件：竖直排列、整体水平居中、无背景，悬浮于输入栏上方
             if (!current?.selectedComponents.isNullOrEmpty()) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surfaceContainer)
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 12.dp, vertical = 2.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        .padding(vertical = 2.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
                 ) {
                     current!!.selectedComponents.forEachIndexed { index, comp ->
                         Row(
                             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                                .padding(start = 10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
                             Text(
                                 text = comp.displayText(),
@@ -169,11 +165,12 @@ fun AiConversationPage(route: AiConversationRoute) {
                                 maxLines = 1,
                                 softWrap = false,
                                 overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             GkIconButton(
                                 imageVector = GkIcons.Close,
-                                contentDescription = "移除 ${'$'}{comp.displayText()}",
-                                modifier = Modifier.size(28.dp),
+                                contentDescription = "移除",
+                                modifier = Modifier.size(24.dp),
                                 onClick = { vm.removeSelectedComponent(route.snapshotId, index) },
                             )
                         }

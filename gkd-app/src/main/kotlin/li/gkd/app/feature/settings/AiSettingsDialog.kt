@@ -166,7 +166,7 @@ fun AiSettingsDialog(
                 OutlinedTextField(
                     label = { Text("API Key") },
                     value = apiKeyValue,
-                    placeholder = { Text(text = "请输入 API Key") },
+                    placeholder = { Text(text = "sk-...（以 sk- 开头）") },
                     onValueChange = { apiKeyValue = it },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -355,6 +355,9 @@ fun AiSettingsDialog(
                         return@throttle
                     }
                     val config = currentConfig(temp, topP, maxTokens)
+                    AiRuleGenerator.validateAiConfig(config)?.let { hint ->
+                        toast(hint)
+                    }
                     if (testedConfig == config) {
                         // 已测试通过且配置未变，直接保存
                         saveConfig(config)
