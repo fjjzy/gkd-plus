@@ -7,6 +7,7 @@ import kotlinx.coroutines.withContext
 import li.gkd.app.data.screenshotFile
 import li.gkd.app.data.snapshot.SnapshotRepository
 import li.gkd.app.data.snapshot.SnapshotUploadArchive
+import li.gkd.app.feature.ai.AiConversationStore
 import li.gkd.app.ui.share.BaseViewModel
 import li.gkd.app.util.ImageUtils
 import li.gkd.app.util.LogUtils
@@ -46,6 +47,8 @@ class SnapshotVm : BaseViewModel() {
         snapshots.forEach { snapshot ->
             try {
                 SnapshotRepository.delete(snapshot)
+                // 级联删除该快照的 AI 会话
+                runCatching { AiConversationStore.delete(snapshot.id) }
                 deletedIds.add(snapshot.id)
             } catch (e: CancellationException) {
                 throw e

@@ -1,11 +1,10 @@
 package li.gkd.app.feature.ai
 
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
-import li.gkd.app.appScope
-import li.gkd.app.store.FileStateStore
+import li.gkd.app.store.AppStore
 
 @Serializable
 data class AiMessage(
@@ -31,16 +30,16 @@ data class AiConversation(
     }
 }
 
+/**
+ * AI 会话的内存门面：真实状态持久化在 SettingsRepository（ai_conversations.json），
+ * 随设置的备份/导入恢复流程一起导出与还原。
+ */
 object AiConversationStore {
 
     private const val MAX_CONVERSATIONS = 100
 
-    val conversationsFlow: MutableStateFlow<List<AiConversation>> =
-        FileStateStore.createJsonFlow(
-            key = "ai_conversations",
-            default = { emptyList<AiConversation>() },
-            scope = appScope,
-        )
+    val conversationsFlow: StateFlow<List<AiConversation>>
+        get() = AppStore.aiConversationsFlow
 
     private val mutationMutex = Mutex()
 
@@ -48,15 +47,17 @@ object AiConversationStore {
         conversationsFlow.value.find { it.snapshotId == snapshotId }
 
     suspend fun upsert(conversation: AiConversation) = mutationMutex.withLock {
-        val capped = buildList {
-            add(conversation.copy(updateTime = System.currentTimeMillis()))
-            conversationsFlow.value
-                .filter { it.snapshotId != conversation.snapshotId }
-                .sortedByDescending { it.updateTime }
-                .take(MAX_CONVERSATIONS - 1)
-                .forEach { add(it) }
+        val stamped = conversation.copy(updateTime = System.currentTimeMillis())
+        AppStore.updateAiConversations { current ->
+            buildList {
+                add(stamped)
+                current
+                    .filter { it.snapshotId != conversation.snapshotId }
+                    .sortedByDescending { it.updateTime }
+                    .take(MAX_CONVERSATIONS - 1)
+                    .forEach { add(it) }
+            }
         }
-        conversationsFlow.value = capped
     }
 
     suspend fun appendMessage(
@@ -64,19 +65,17 @@ object AiConversationStore {
         message: AiMessage,
         status: String? = null,
     ) = mutationMutex.withLock {
-        val current = conversationsFlow.value
-        if (current.none { it.snapshotId == snapshotId }) {
-            return@withLock
-        }
-        conversationsFlow.value = current.map {
-            if (it.snapshotId == snapshotId) {
-                it.copy(
-                    messages = it.messages + message,
-                    status = status ?: it.status,
-                    updateTime = System.currentTimeMillis(),
-                )
-            } else {
-                it
+        AppStore.updateAiConversations { current ->
+            current.map {
+                if (it.snapshotId == snapshotId) {
+                    it.copy(
+                        messages = it.messages + message,
+                        status = status ?: it.status,
+                        updateTime = System.currentTimeMillis(),
+                    )
+                } else {
+                    it
+                }
             }
         }
     }
@@ -86,16 +85,17 @@ object AiConversationStore {
         status: String,
         lastRule: String? = null,
     ) = mutationMutex.withLock {
-        val current = conversationsFlow.value
-        conversationsFlow.value = current.map {
-            if (it.snapshotId == snapshotId) {
-                it.copy(
-                    status = status,
-                    lastRule = lastRule ?: it.lastRule,
-                    updateTime = System.currentTimeMillis(),
-                )
-            } else {
-                it
+        AppStore.updateAiConversations { current ->
+            current.map {
+                if (it.snapshotId == snapshotId) {
+                    it.copy(
+                        status = status,
+                        lastRule = lastRule ?: it.lastRule,
+                        updateTime = System.currentTimeMillis(),
+                    )
+                } else {
+                    it
+                }
             }
         }
     }
@@ -108,33 +108,35 @@ object AiConversationStore {
         delta: String,
         role: String = "assistant",
     ) = mutationMutex.withLock {
-        val current = conversationsFlow.value
-        conversationsFlow.value = current.map { conversation ->
-            if (conversation.snapshotId == snapshotId) {
-                val messages = conversation.messages
-                if (messages.isNotEmpty() && messages.last().role == role) {
-                    conversation.copy(
-                        messages = messages.subList(0, messages.size - 1) + messages.last().copy(
-                            content = messages.last().content + delta,
-                        ),
-                    )
+        AppStore.updateAiConversations { current ->
+            current.map { conversation ->
+                if (conversation.snapshotId == snapshotId) {
+                    val messages = conversation.messages
+                    if (messages.isNotEmpty() && messages.last().role == role) {
+                        conversation.copy(
+                            messages = messages.subList(0, messages.size - 1) + messages.last().copy(
+                                content = messages.last().content + delta,
+                            ),
+                        )
+                    } else {
+                        conversation.copy(
+                            messages = messages + AiMessage(
+                                role = role,
+                                content = delta,
+                                time = System.currentTimeMillis(),
+                            ),
+                        )
+                    }
                 } else {
-                    conversation.copy(
-                        messages = messages + AiMessage(
-                            role = role,
-                            content = delta,
-                            time = System.currentTimeMillis(),
-                        ),
-                    )
+                    conversation
                 }
-            } else {
-                conversation
             }
         }
     }
 
     suspend fun delete(snapshotId: Long) = mutationMutex.withLock {
-        conversationsFlow.value =
-            conversationsFlow.value.filter { it.snapshotId != snapshotId }
+        AppStore.updateAiConversations { current ->
+            current.filter { it.snapshotId != snapshotId }
+        }
     }
 }

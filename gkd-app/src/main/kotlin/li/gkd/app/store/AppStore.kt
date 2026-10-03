@@ -57,6 +57,9 @@ object AppStore {
     val a11yScopeAppListFlow: StateFlow<Set<String>>
         get() = repository.a11yScopeAppList
 
+    val aiConversationsFlow: StateFlow<List<li.gkd.app.feature.ai.AiConversation>>
+        get() = repository.aiConversations
+
     val actualA11yScopeAppList: Set<String>
         get() = if (storeFlow.value.useAutomation) {
             a11yScopeAppListFlow.value
@@ -91,6 +94,10 @@ object AppStore {
 
     fun updateA11yScopeAppList(transform: (Set<String>) -> Set<String>) =
         repository.updateA11yScopeAppList(transform)
+
+    fun updateAiConversations(
+        transform: (List<li.gkd.app.feature.ai.AiConversation>) -> List<li.gkd.app.feature.ai.AiConversation>,
+    ) = repository.updateAiConversations(transform)
 
     fun replaceA11yScopeAppList(value: Set<String>) = repository.replaceA11yScopeAppList(value)
 

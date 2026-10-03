@@ -56,6 +56,7 @@ fun GkSnapshotActionsSheet(
     onSaveToAlbum: () -> Unit,
     onReplace: () -> Unit,
     onDelete: () -> Unit,
+    onGenerateAiRule: () -> Unit,
 ) {
     fun perform(action: () -> Unit) {
         onDismissRequest()
@@ -73,6 +74,12 @@ fun GkSnapshotActionsSheet(
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             SnapshotActionsHeader(snapshot, appName, modifier = Modifier.padding(bottom = 8.dp))
+            SnapshotActionRow(
+                icon = GkIcons.AutoMode,
+                title = "生成 AI 规则",
+                subtitle = "AI 直接生成或进入对话生成",
+                onClick = { perform(onGenerateAiRule) },
+            )
             SnapshotActionRow(
                 icon = if (snapshot.githubAssetId == null) GkIcons.Link else GkIcons.ContentCopy,
                 title = if (snapshot.githubAssetId == null) {

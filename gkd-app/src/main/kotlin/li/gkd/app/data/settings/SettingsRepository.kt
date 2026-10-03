@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import li.gkd.app.text.UiStrings
+import li.gkd.app.feature.ai.AiConversation
 import li.gkd.app.util.AppListString
 import li.gkd.app.util.LogUtils
 import li.gkd.app.util.json
@@ -192,12 +193,24 @@ class SettingsRepository(
         encode = AppListString::encode,
         scope = scope,
     )
+    private val aiConversationsValue = PersistedValue(
+        filename = "ai_conversations.json",
+        file = storeFolder.resolve("ai_conversations.json"),
+        decode = { text ->
+            text?.let {
+                runCatching { json.decodeFromString<List<AiConversation>>(it) }.getOrNull()
+            } ?: emptyList()
+        },
+        encode = { json.encodeToString(it) },
+        scope = scope,
+    )
 
     val settings: StateFlow<SettingsStore> = settingsValue.state
     val actionCount: StateFlow<Long> = actionCountValue.state
     val blockMatchAppList: StateFlow<Set<String>> = blockMatchAppListValue.state
     val blockA11yAppList: StateFlow<Set<String>> = blockA11yAppListValue.state
     val a11yScopeAppList: StateFlow<Set<String>> = a11yScopeAppListValue.state
+    val aiConversations: StateFlow<List<AiConversation>> = aiConversationsValue.state
 
     val backupFilenames: Set<String> = setOf(
         settingsValue.filename,
@@ -205,6 +218,7 @@ class SettingsRepository(
         blockMatchAppListValue.filename,
         blockA11yAppListValue.filename,
         a11yScopeAppListValue.filename,
+        aiConversationsValue.filename,
     )
 
     /**
@@ -228,8 +242,11 @@ class SettingsRepository(
 
     fun updateA11yScopeAppList(transform: (Set<String>) -> Set<String>) =
         a11yScopeAppListValue.update(transform)
+    fun replaceA11yScopeAppList(value: Set<String>) =
+        a11yScopeAppListValue.replace(value)
 
-    fun replaceA11yScopeAppList(value: Set<String>) = a11yScopeAppListValue.replace(value)
+    fun updateAiConversations(transform: (List<AiConversation>) -> List<AiConversation>) =
+        aiConversationsValue.update(transform)
 
     fun exportBackupEntries(): Map<String, String> = mapOf(
         settingsValue.filename to settingsValue.encodeCurrent(),
@@ -237,6 +254,7 @@ class SettingsRepository(
         blockMatchAppListValue.filename to blockMatchAppListValue.encodeCurrent(),
         blockA11yAppListValue.filename to blockA11yAppListValue.encodeCurrent(),
         a11yScopeAppListValue.filename to a11yScopeAppListValue.encodeCurrent(),
+        aiConversationsValue.filename to aiConversationsValue.encodeCurrent(),
     )
 
     /** Persists imported values before [block]; on failure, rolls back while retaining later commands. */
@@ -245,7 +263,7 @@ class SettingsRepository(
             // Decode everything before changing any value.
             val restores = listOf(
                 settingsValue, actionCountValue, blockMatchAppListValue,
-                blockA11yAppListValue, a11yScopeAppListValue,
+                blockA11yAppListValue, a11yScopeAppListValue, aiConversationsValue,
             ).mapNotNull { value ->
                 entries[value.filename]?.let(value::prepareRestore)
             }

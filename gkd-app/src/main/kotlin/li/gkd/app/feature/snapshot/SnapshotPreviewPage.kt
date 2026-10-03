@@ -38,7 +38,9 @@ import li.gkd.app.ui.component.GkIconButton
 import li.gkd.app.ui.component.GkIcons
 import li.gkd.app.ui.component.GkRetainedSheet
 import li.gkd.app.ui.component.SheetRequest
+import li.gkd.app.ui.share.launchUi
 import li.gkd.app.util.getShowActivityId
+import li.gkd.db.Snapshot
 
 @Serializable
 data class SnapshotPreviewRoute(
@@ -55,6 +57,7 @@ fun SnapshotPreviewPage(route: SnapshotPreviewRoute) {
     val state = loadableState.value
     key(route) {
         var actionRequest by remember { mutableStateOf<SheetRequest<Long>?>(null) }
+        var aiRuleRequest by remember { mutableStateOf<Snapshot?>(null) }
         var imageVersion by remember { mutableIntStateOf(0) }
         val snapshotsById = state?.snapshots?.associateBy { it.id }.orEmpty()
         val previewSnapshots = route.snapshotIds.mapNotNull(snapshotsById::get)
@@ -169,6 +172,33 @@ fun SnapshotPreviewPage(route: SnapshotPreviewRoute) {
                     onSaveToAlbum = { actions.saveToAlbum(snapshot) },
                     onReplace = { actions.replace(snapshot) },
                     onDelete = { actions.delete(snapshot) },
+                    onGenerateAiRule = { aiRuleRequest = snapshot },
+                )
+            }
+            aiRuleRequest?.let { snapshot ->
+                GenerateAiRuleDialog(
+                    onDismissRequest = { aiRuleRequest = null },
+                    onDirectGenerate = {
+                        aiRuleRequest = null
+                        li.gkd.app.feature.ai.AiRuleLauncher.directGenerate(
+                            snapshot.id,
+                            snapshot.appId,
+                        )
+                        li.gkd.app.util.ToastUtils.toast("已开始生成 AI 规则")
+                    },
+                    onConversationGenerate = {
+                        val target = snapshot
+                        aiRuleRequest = null
+                        vm.scope.launchUi {
+                            li.gkd.app.feature.ai.AiRuleLauncher.ensureConversation(
+                                target.id,
+                                target.appId,
+                            )
+                            mainVm.navigatePage(
+                                li.gkd.app.feature.ai.AiConversationRoute(target.id)
+                            )
+                        }
+                    },
                 )
             }
         } else {

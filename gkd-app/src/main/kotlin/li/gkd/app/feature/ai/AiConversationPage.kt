@@ -5,11 +5,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -82,39 +85,39 @@ fun AiConversationPage(route: AiConversationRoute) {
             )
         },
         bottomBar = {
-            Column(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .imePadding()
-                    .navigationBarsPadding()
+                    .windowInsetsPadding(
+                        // 最大值取一个：键盘弹出时贴键盘，收起时贴导航栏，避免双重叠加
+                        WindowInsets.ime.union(WindowInsets.navigationBars)
+                    )
                     .background(MaterialTheme.colorScheme.surfaceContainer)
                     .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 OutlinedTextField(
                     value = input,
                     onValueChange = { input = it },
                     placeholder = { Text(text = "输入你的要求") },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(24.dp),
+                    minLines = 1,
                     maxLines = 4,
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
+                TextButton(
+                    onClick = throttle {
+                        val text = input.trim()
+                        if (text.isNotEmpty() && current != null) {
+                            input = ""
+                            vm.sendUserMessage(route.snapshotId, text)
+                        }
+                    },
+                    enabled = input.isNotBlank() && current != null &&
+                        current.status != AiConversation.STATUS_GENERATING,
                 ) {
-                    TextButton(
-                        onClick = throttle {
-                            val text = input.trim()
-                            if (text.isNotEmpty() && current != null) {
-                                input = ""
-                                vm.sendUserMessage(route.snapshotId, text)
-                            }
-                        },
-                        enabled = input.isNotBlank() && current != null &&
-                            current.status != AiConversation.STATUS_GENERATING,
-                    ) {
-                        Text(text = "发送")
-                    }
+                    Text(text = "发送")
                 }
             }
         },

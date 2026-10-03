@@ -33,6 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
@@ -82,6 +83,7 @@ import li.gkd.app.core.state.Loadable
 import li.gkd.app.data.date
 import li.gkd.app.data.screenshotFile
 import li.gkd.app.data.snapshot.SnapshotRepository
+import li.gkd.app.feature.ai.AiRuleLauncher
 import li.gkd.app.store.AppStore
 import li.gkd.app.text.UiStrings
 import li.gkd.app.ui.component.GkBatchActionMenuItem
@@ -133,6 +135,7 @@ fun SnapshotPage() {
         mainVm.navigatePage(SnapshotPreviewRoute(snapshotId, previewSnapshotIds))
     }
     var actionRequest by remember { mutableStateOf<SheetRequest<Long>?>(null) }
+    var aiRuleRequest by remember { mutableStateOf<Snapshot?>(null) }
     val actionSnapshot = actionRequest?.let { request -> snapshots.find { it.id == request.key } }
     val thumbnailVersions = remember { mutableStateMapOf<Long, Int>() }
     val selectionState = rememberMultiSelectionState<Long>()
@@ -449,9 +452,31 @@ fun SnapshotPage() {
             onSaveToAlbum = { actions.saveToAlbum(snapshot) },
             onReplace = { actions.replace(snapshot) },
             onDelete = { actions.delete(snapshot) },
+            onGenerateAiRule = { aiRuleRequest = snapshot },
+        )
+    }
+
+    aiRuleRequest?.let { snapshot ->
+        GenerateAiRuleDialog(
+            onDismissRequest = { aiRuleRequest = null },
+            onDirectGenerate = {
+                aiRuleRequest = null
+                AiRuleLauncher.directGenerate(snapshot.id, snapshot.appId)
+                toast("已开始生成 AI 规则，可在 AI 规则工作台查看")
+            },
+            onConversationGenerate = {
+                val target = snapshot
+                aiRuleRequest = null
+                actionScope.launchUi {
+                    AiRuleLauncher.ensureConversation(target.id, target.appId)
+                    mainVm.navigatePage(li.gkd.app.feature.ai.AiConversationRoute(target.id))
+                }
+            },
         )
     }
 }
+
+
 
 @Composable
 private fun SnapshotGroupHeader(

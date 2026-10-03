@@ -245,40 +245,7 @@ fun useDashboardPage(): ScaffoldExt {
                 },
             )
 
-            val latestRecord by SubscriptionState.latestRecordFlow.collectAsStateWithLifecycle()
-            val latestRecordDesc by SubscriptionState.latestRecordDescFlow.collectAsStateWithLifecycle()
-            TriggerOverviewCard(
-                subsStatus = subsStatus,
-                latestRecordDesc = latestRecordDesc,
-                latestRecordIsGlobal = latestRecord?.groupType == RuleGroupType.Global,
-                onOpenActionLog = { mainVm.navigatePage(ActionLogRoute()) },
-                onOpenLatestRecord = {
-                    latestRecord?.let {
-                        mainVm.navigatePage(AppConfigRoute(appId = it.appId, focusLog = it))
-                    }
-                },
-            )
-
-            if (ActivityService.isRunning.collectAsStateWithLifecycle().value) {
-                PageItemCard(
-                    title = UiStrings.activity_log_title,
-                    subtitle = UiStrings.activity_record_description,
-                    imageVector = GkIcons.Layers,
-                    onClickLabel = UiStrings.activity_log_open,
-                    onClick = {
-                        mainVm.navigatePage(ActivityLogRoute)
-                    })
-            }
-
             val buttonServiceRunning by ButtonService.isRunning.collectAsStateWithLifecycle()
-            PageSwitchItemCard(
-                imageVector = GkIcons.AutoMode,
-                title = "启用 AI 规则",
-                subtitle = "捕获快照后自动调用大模型生成订阅规则",
-                checked = store.aiEnable,
-                onCheckedChange = vm::setAiEnable,
-            )
-
             PageSwitchItemCard(
                 imageVector = GkIcons.CenterFocusWeak,
                 title = UiStrings.snapshot_button_label,
@@ -306,6 +273,31 @@ fun useDashboardPage(): ScaffoldExt {
                 onClick = {
                     mainVm.navigatePage(li.gkd.app.feature.ai.AiWorkbenchRoute)
                 })
+
+            val latestRecord by SubscriptionState.latestRecordFlow.collectAsStateWithLifecycle()
+            val latestRecordDesc by SubscriptionState.latestRecordDescFlow.collectAsStateWithLifecycle()
+            TriggerOverviewCard(
+                subsStatus = subsStatus,
+                latestRecordDesc = latestRecordDesc,
+                latestRecordIsGlobal = latestRecord?.groupType == RuleGroupType.Global,
+                onOpenActionLog = { mainVm.navigatePage(ActionLogRoute()) },
+                onOpenLatestRecord = {
+                    latestRecord?.let {
+                        mainVm.navigatePage(AppConfigRoute(appId = it.appId, focusLog = it))
+                    }
+                },
+            )
+
+            if (ActivityService.isRunning.collectAsStateWithLifecycle().value) {
+                PageItemCard(
+                    title = UiStrings.activity_log_title,
+                    subtitle = UiStrings.activity_record_description,
+                    imageVector = GkIcons.Layers,
+                    onClickLabel = UiStrings.activity_log_open,
+                    onClick = {
+                        mainVm.navigatePage(ActivityLogRoute)
+                    })
+            }
 
             PageItemCard(
                 title = UiStrings.gkd_learn_more,
