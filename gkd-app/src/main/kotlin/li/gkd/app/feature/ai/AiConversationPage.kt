@@ -38,6 +38,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavKey
 import kotlinx.serialization.Serializable
 import li.gkd.app.MainViewModel
+import li.gkd.app.ui.component.GkAppIcon
+import li.gkd.app.ui.component.GkAppNameText
 import li.gkd.app.ui.component.GkIconButton
 import li.gkd.app.ui.component.GkIcons
 import li.gkd.app.ui.component.GkPageBottomSpace
@@ -76,11 +78,21 @@ fun AiConversationPage(route: AiConversationRoute) {
                     )
                 },
                 title = {
-                    Text(
-                        text = current?.appId?.substringAfterLast('.') ?: "AI 对话",
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    val appId = current?.appId
+                    if (appId == null) {
+                        Text(text = "AI 对话")
+                    } else {
+                        Row(
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            GkAppIcon(appId = appId, size = 24.dp)
+                            GkAppNameText(
+                                appId = appId,
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                        }
+                    }
                 },
             )
         },
@@ -88,15 +100,22 @@ fun AiConversationPage(route: AiConversationRoute) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .windowInsetsPadding(
-                        // 最大值取一个：键盘弹出时贴键盘，收起时贴导航栏，避免双重叠加
-                        WindowInsets.ime.union(WindowInsets.navigationBars)
-                    )
+                    // 背景先铺满（含键盘 inset 区域），再在内部做 inset 让位，
+                    // 否则整个 bar 被抬起、下方露出 Scaffold 底色（即"输入框下突现空白"的根因）
                     .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                // 加号：跳转该快照的组件选择页
+                GkIconButton(
+                    imageVector = GkIcons.Add,
+                    contentDescription = "选择快照组件",
+                    onClick = {
+                        mainVm.navigatePage(AiSnapshotPickerRoute(route.snapshotId))
+                    },
+                )
                 OutlinedTextField(
                     value = input,
                     onValueChange = { input = it },

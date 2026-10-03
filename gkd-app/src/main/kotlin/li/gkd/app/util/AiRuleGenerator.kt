@@ -159,6 +159,32 @@ object AiRuleGenerator {
         }
     }
 
+    /**
+     * 分析连接测试失败的常见原因，给用户一个可读的提示。
+     */
+    fun analyzeConnectionError(e: Throwable): String {
+        val msg = e.message ?: e.toString()
+        return when {
+            msg.contains("401") || msg.contains("403") ||
+                msg.contains("Unauthorized", ignoreCase = true) ||
+                msg.contains("Forbidden", ignoreCase = true) ->
+                "鉴权失败（401/403）：API Key 填错了，或该 Key 无权访问此模型"
+            msg.contains("402") ->
+                "服务方返回 402：账号余额不足或未开通付费"
+            msg.contains("429") ->
+                "请求被限流（429）：额度用完或请求太频繁，稍后再试"
+            msg.contains("404") ->
+                "接口不存在（404）：API 地址或协议选错了"
+            msg.contains("timed out", ignoreCase = true) || msg.contains("timeout", true) ->
+                "连接超时：网络不通，或 API 地址写错"
+            msg.contains("Unable to resolve host", ignoreCase = true) ->
+                "域名解析失败：API 地址可能拼写错误，或当前网络无法访问"
+            msg.contains("SSL") || msg.contains("certificate", true) ->
+                "SSL 证书错误：API 地址应为 https 开头"
+            else -> "连接失败：请检查网络、API 地址、Key 和模型配置"
+        }
+    }
+
     suspend fun testConnection(config: AiConfig): Result<String> = runCatching {
         val httpClient = createHttpClient()
         try {

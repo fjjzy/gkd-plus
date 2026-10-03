@@ -35,6 +35,8 @@ import li.gkd.app.feature.settings.AiSettingsDialog
 import li.gkd.app.feature.snapshot.SnapshotPageRoute
 import li.gkd.app.store.AppStore.storeFlow
 import li.gkd.app.text.UiStrings
+import li.gkd.app.ui.component.GkAppIcon
+import li.gkd.app.ui.component.GkAppNameText
 import li.gkd.app.ui.component.GkEmptyState
 import li.gkd.app.ui.component.GkIconButton
 import li.gkd.app.ui.component.GkIcons
@@ -186,13 +188,17 @@ private fun ConversationCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text(
-                    text = conversation.appId.substringAfterLast('.'),
-                    style = MaterialTheme.typography.bodyLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                Row(
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.weight(1f),
-                )
+                ) {
+                    GkAppIcon(appId = conversation.appId, size = 24.dp)
+                    GkAppNameText(
+                        appId = conversation.appId,
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
                 Text(
                     text = conversationTimeFormat.format(Date(conversation.updateTime)),
                     style = MaterialTheme.typography.labelSmall,

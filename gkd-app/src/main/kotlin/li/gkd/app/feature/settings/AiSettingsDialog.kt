@@ -42,6 +42,7 @@ import li.gkd.app.ui.component.GkIcons
 import li.gkd.app.ui.component.GkSizedIconButton
 import li.gkd.app.util.AiRuleGenerator
 import li.gkd.app.util.TimeUtils.throttle
+import li.gkd.app.util.ToastUtils.copyText
 import li.gkd.app.util.ToastUtils.toast
 import li.gkd.app.util.launchLogged
 
@@ -62,14 +63,46 @@ fun AiSettingsDialog(
     var modelMenuExpanded by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<String?>(null) }
     var testLoading by remember { mutableStateOf(false) }
+    // 已通过测试的完整配置；点确定时若当前配置与之一致则直接保存
+    var testedConfig by remember { mutableStateOf<AiConfig?>(null) }
     val scope = rememberCoroutineScope()
 
-    fun currentConfig() = aiConfig.copy(
+    fun currentConfig(temp: Float? = null, topP: Float? = null, maxTokens: Int? = null) = aiConfig.copy(
         protocol = protocolValue,
         apiUrl = apiUrlValue,
         apiKey = apiKeyValue,
         model = modelValue,
+        temperature = temp ?: temperatureValue.toFloatOrNull() ?: aiConfig.temperature,
+        topP = topP ?: topPValue.toFloatOrNull() ?: aiConfig.topP,
+        maxTokens = maxTokens ?: maxTokensValue.toIntOrNull() ?: aiConfig.maxTokens,
     )
+
+    fun saveConfig(config: AiConfig) {
+        AppStore.updateSettings {
+            it.copy(
+                aiConfig = it.aiConfig.copy(
+                    protocol = config.protocol,
+                    apiUrl = config.apiUrl.trim().trimEnd('/'),
+                    apiKey = config.apiKey.trim(),
+                    model = config.model.trim(),
+                    temperature = config.temperature,
+                    topP = config.topP,
+                    maxTokens = config.maxTokens,
+                )
+            )
+        }
+        toast("AI 配置已保存")
+        onDismissRequest()
+    }
+
+    fun onFailedTest(e: Throwable) {
+        val reason = AiRuleGenerator.analyzeConnectionError(e)
+        val fullError = "AI 规则配置连接测试失败：\n${e.message ?: e.toString()}\n\n分析：$reason"
+        // 错误信息已复制到剪贴板，方便去问其他 AI
+        copyText(fullError)
+        testResult = "失败：$reason（详情已复制）"
+        toast("连接测试失败：$reason\n（错误详情已复制到剪贴板）")
+    }
 
     GkAlertDialog(
         properties = DialogProperties(dismissOnClickOutside = false),
@@ -269,14 +302,16 @@ fun AiSettingsDialog(
                             testLoading = true
                             testResult = null
                             scope.launchLogged {
-                                val result = AiRuleGenerator.testConnection(currentConfig())
+                                val config = currentConfig()
+                                val result = AiRuleGenerator.testConnection(config)
                                 testLoading = false
                                 result.onSuccess {
+                                    testedConfig = config
                                     testResult = "连接成功"
                                     toast("连接测试成功")
                                 }.onFailure { e ->
-                                    testResult = "失败：${e.message}"
-                                    toast("连接测试失败：${e.message}")
+                                    testedConfig = null
+                                    onFailedTest(e)
                                 }
                             }
                         },
@@ -305,30 +340,46 @@ fun AiSettingsDialog(
         },
         onDismissRequest = onDismissRequest,
         confirmButton = {
-            TextButton(onClick = throttle {
-                val temp = temperatureValue.toFloatOrNull()
-                val topP = topPValue.toFloatOrNull()
-                val maxTokens = maxTokensValue.toIntOrNull()
-                if (temp == null || topP == null || maxTokens == null) {
-                    toast("参数格式错误")
-                    return@throttle
+            TextButton(
+                enabled = !testLoading,
+                onClick = throttle {
+                    val temp = temperatureValue.toFloatOrNull()
+                    val topP = topPValue.toFloatOrNull()
+                    val maxTokens = maxTokensValue.toIntOrNull()
+                    if (temp == null || topP == null || maxTokens == null) {
+                        toast("参数格式错误")
+                        return@throttle
+                    }
+                    if (apiUrlValue.isBlank() || apiKeyValue.isBlank() || modelValue.isBlank()) {
+                        toast("请先填写完整配置")
+                        return@throttle
+                    }
+                    val config = currentConfig(temp, topP, maxTokens)
+                    if (testedConfig == config) {
+                        // 已测试通过且配置未变，直接保存
+                        saveConfig(config)
+                        return@throttle
+                    }
+                    // 未测试（或配置改过）：先自动测试，成功才保存
+                    testLoading = true
+                    testResult = null
+                    scope.launchLogged {
+                        val result = AiRuleGenerator.testConnection(config)
+                        testLoading = false
+                        result.onSuccess {
+                            testedConfig = config
+                            saveConfig(config)
+                        }.onFailure { e ->
+                            testedConfig = null
+                            onFailedTest(e)
+                        }
+                    }
+                },
+            ) {
+                if (testLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                 }
-                AppStore.updateSettings {
-                    it.copy(
-                        aiConfig = it.aiConfig.copy(
-                            protocol = protocolValue,
-                            apiUrl = apiUrlValue.trim().trimEnd('/'),
-                            apiKey = apiKeyValue.trim(),
-                            model = modelValue.trim(),
-                            temperature = temp,
-                            topP = topP,
-                            maxTokens = maxTokens,
-                        )
-                    )
-                }
-                toast("AI 配置已保存")
-                onDismissRequest()
-            }) {
                 Text(text = "确认")
             }
         },

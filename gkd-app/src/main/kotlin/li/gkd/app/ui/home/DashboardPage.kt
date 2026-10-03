@@ -229,22 +229,6 @@ fun useDashboardPage(): ScaffoldExt {
                 )
             }
 
-            PageSwitchItemCard(
-                imageVector = GkIcons.Notifications,
-                title = UiStrings.persistent_notification,
-                subtitle = UiStrings.status_statistics_description,
-                checked = manageRunning && store.enableStatusService,
-                onCheckedChange = {
-                    if (it) {
-                        vm.scope.launchUi {
-                            mainVm.enableStatusService()
-                        }
-                    } else {
-                        vm.stopStatusService()
-                    }
-                },
-            )
-
             val buttonServiceRunning by ButtonService.isRunning.collectAsStateWithLifecycle()
             PageSwitchItemCard(
                 imageVector = GkIcons.CenterFocusWeak,
@@ -273,6 +257,22 @@ fun useDashboardPage(): ScaffoldExt {
                 onClick = {
                     mainVm.navigatePage(li.gkd.app.feature.ai.AiWorkbenchRoute)
                 })
+
+            PageSwitchItemCard(
+                imageVector = GkIcons.Notifications,
+                title = UiStrings.persistent_notification,
+                subtitle = UiStrings.status_statistics_description,
+                checked = manageRunning && store.enableStatusService,
+                onCheckedChange = {
+                    if (it) {
+                        vm.scope.launchUi {
+                            mainVm.enableStatusService()
+                        }
+                    } else {
+                        vm.stopStatusService()
+                    }
+                },
+            )
 
             val latestRecord by SubscriptionState.latestRecordFlow.collectAsStateWithLifecycle()
             val latestRecordDesc by SubscriptionState.latestRecordDescFlow.collectAsStateWithLifecycle()
