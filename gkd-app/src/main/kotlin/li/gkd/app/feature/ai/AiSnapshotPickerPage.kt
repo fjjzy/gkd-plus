@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -37,6 +39,8 @@ import li.gkd.app.ui.component.GkIcons
 import li.gkd.app.ui.component.GkPageBottomSpace
 import li.gkd.app.ui.component.GkTopAppBar
 import li.gkd.app.util.TimeUtils.throttle
+
+private val compactButtonPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)
 
 @Serializable
 data class AiSnapshotPickerRoute(val snapshotId: Long) : NavKey
@@ -94,26 +98,31 @@ fun AiSnapshotPickerPage(route: AiSnapshotPickerRoute) {
                         )
                     }
                 }
+                // 紧凑单行按钮：文字不换行；放不下时横向滚动而不是折行
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    TextButton(onClick = throttle { mainVm.popPage() }) {
-                        Text(text = "算了")
+                    TextButton(
+                        onClick = throttle { mainVm.popPage() },
+                        contentPadding = compactButtonPadding,
+                    ) {
+                        Text(text = "算了", maxLines = 1, softWrap = false)
                     }
                     TextButton(
                         enabled = selectedNode != null,
                         onClick = { onNodeChange(expandSelection(nodes, selectedNode)) },
+                        contentPadding = compactButtonPadding,
                     ) {
-                        Text(text = "扩大选中")
+                        Text(text = "扩大", maxLines = 1, softWrap = false)
                     }
                     TextButton(
                         enabled = selectedNode != null,
                         onClick = { onNodeChange(shrinkSelection(nodes, selectedNode)) },
+                        contentPadding = compactButtonPadding,
                     ) {
-                        Text(text = "缩小选中")
+                        Text(text = "缩小", maxLines = 1, softWrap = false)
                     }
-                    Spacer(modifier = Modifier.weight(1f))
                     TextButton(
                         enabled = selectedNode != null,
                         onClick = throttle {
@@ -122,8 +131,9 @@ fun AiSnapshotPickerPage(route: AiSnapshotPickerRoute) {
                             vm.startConversation(route.snapshotId, appId, node)
                             mainVm.navigatePage(AiConversationRoute(route.snapshotId))
                         },
+                        contentPadding = compactButtonPadding,
                     ) {
-                        Text(text = "对话生成")
+                        Text(text = "对话生成", maxLines = 1, softWrap = false)
                     }
                     TextButton(
                         enabled = selectedNode != null,
@@ -132,8 +142,9 @@ fun AiSnapshotPickerPage(route: AiSnapshotPickerRoute) {
                             vm.generateDirect(route.snapshotId, node)
                             mainVm.popPage()
                         },
+                        contentPadding = compactButtonPadding,
                     ) {
-                        Text(text = "直接生成")
+                        Text(text = "直接生成", maxLines = 1, softWrap = false)
                     }
                 }
             }

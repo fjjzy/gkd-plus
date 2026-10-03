@@ -5,14 +5,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.union
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -96,14 +93,60 @@ fun AiConversationPage(route: AiConversationRoute) {
                 },
             )
         },
-        bottomBar = {
+    ) { contentPadding ->
+        // 不用 Scaffold.bottomBar：它与 ime inset 叠加导致的空隙屡修不好。
+        // 改用 App 内已验证的模式：输入栏作为内容末尾元素，仅由 imePadding 让位。
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(contentPadding)
+                .consumeWindowInsets(contentPadding),
+        ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                state = listState,
+                contentPadding = PaddingValues(
+                    start = 12.dp,
+                    end = 12.dp,
+                    top = 8.dp,
+                    bottom = 8.dp,
+                ),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+            if (current == null) {
+                item(key = "empty") {
+                    Column {
+                        Text(
+                            text = "会话不存在，可能已被删除",
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        GkPageBottomSpace()
+                    }
+                }
+            } else {
+                items(current.messages, key = { it.time }) { message ->
+                    MessageItem(message)
+                }
+                if (current.status == AiConversation.STATUS_GENERATING) {
+                    item(key = "generating") {
+                        Text(
+                            text = "AI 正在生成规则...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+                item(key = "bottom-space") { GkPageBottomSpace() }
+            }
+            }
+            // 输入栏：仅 imePadding 让位（App 内已验证模式），键盘弹出时紧贴键盘
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    // 背景先铺满（含键盘 inset 区域），再在内部做 inset 让位，
-                    // 否则整个 bar 被抬起、下方露出 Scaffold 底色（即"输入框下突现空白"的根因）
                     .background(MaterialTheme.colorScheme.surfaceContainer)
-                    .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
+                    .imePadding()
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -138,46 +181,6 @@ fun AiConversationPage(route: AiConversationRoute) {
                 ) {
                     Text(text = "发送")
                 }
-            }
-        },
-    ) { contentPadding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(contentPadding),
-            state = listState,
-            contentPadding = PaddingValues(
-                start = 12.dp,
-                end = 12.dp,
-                top = 8.dp,
-                bottom = 8.dp,
-            ),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (current == null) {
-                item(key = "empty") {
-                    Column {
-                        Text(
-                            text = "会话不存在，可能已被删除",
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                        GkPageBottomSpace()
-                    }
-                }
-            } else {
-                items(current.messages, key = { it.time }) { message ->
-                    MessageItem(message)
-                }
-                if (current.status == AiConversation.STATUS_GENERATING) {
-                    item(key = "generating") {
-                        Text(
-                            text = "AI 正在生成规则...",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
-                item(key = "bottom-space") { GkPageBottomSpace() }
             }
         }
     }

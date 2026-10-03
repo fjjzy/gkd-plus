@@ -2,12 +2,14 @@ package li.gkd.app.feature.ai
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -32,6 +35,7 @@ import kotlinx.serialization.Serializable
 import li.gkd.app.MainViewModel
 import li.gkd.app.data.settings.AiConfig
 import li.gkd.app.feature.settings.AiSettingsDialog
+import li.gkd.app.data.snapshot.SnapshotRepository
 import li.gkd.app.feature.snapshot.SnapshotPageRoute
 import li.gkd.app.store.AppStore.storeFlow
 import li.gkd.app.text.UiStrings
@@ -181,53 +185,72 @@ private fun ConversationCard(
         shape = MaterialTheme.shapes.large,
         colors = surfaceCardColors,
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+            // 快照截图缩略图（比应用图标更直观，与快照记录页一致）
+            val screenshot = SnapshotRepository.screenshotFile(conversation.snapshotId)
+            if (screenshot.isFile) {
+                coil3.compose.AsyncImage(
+                    model = screenshot,
+                    contentDescription = null,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(10.dp)),
+                )
+            } else {
+                GkAppIcon(
+                    appId = conversation.appId,
+                    size = 48.dp,
+                    modifier = Modifier.clip(RoundedCornerShape(10.dp)),
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Row(
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    GkAppIcon(appId = conversation.appId, size = 24.dp)
                     GkAppNameText(
                         appId = conversation.appId,
                         style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = conversationTimeFormat.format(Date(conversation.updateTime)),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                val statusText = when (conversation.status) {
+                    AiConversation.STATUS_GENERATING -> "生成中..."
+                    AiConversation.STATUS_SUCCESS -> "已生成规则"
+                    AiConversation.STATUS_FAILED -> "生成失败"
+                    else -> if (conversation.messages.isEmpty()) "待发起" else "对话中"
+                }
                 Text(
-                    text = conversationTimeFormat.format(Date(conversation.updateTime)),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            val statusText = when (conversation.status) {
-                AiConversation.STATUS_GENERATING -> "生成中..."
-                AiConversation.STATUS_SUCCESS -> "已生成规则"
-                AiConversation.STATUS_FAILED -> "生成失败"
-                else -> if (conversation.messages.isEmpty()) "待发起" else "对话中"
-            }
-            Text(
-                text = statusText,
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (conversation.status == AiConversation.STATUS_FAILED) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-            )
-            conversation.messages.lastOrNull()?.let { last ->
-                Text(
-                    text = last.content,
+                    text = statusText,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
+                    color = if (conversation.status == AiConversation.STATUS_FAILED) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                 )
+                conversation.messages.lastOrNull()?.let { last ->
+                    Text(
+                        text = last.content,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
     }
