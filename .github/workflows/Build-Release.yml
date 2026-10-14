@@ -27,10 +27,8 @@ jobs:
       - name: write gkd keystore
         run: echo ${{ secrets.GKD_STORE_FILE_BASE64 }} | base64 --decode > ${{ github.workspace }}/gkd.jks
 
-      - name: write play keystore
-        run: echo ${{ secrets.PLAY_STORE_FILE_BASE64 }} | base64 --decode > ${{ github.workspace }}/play.jks
-
-      - run: ./gradlew :gkd-app:assembleGkdRelease :gkd-app:bundlePlayRelease
+      # GKD-Plus 不上架 Google Play, 只构建 gkd 渠道; play 渠道需要独立的 Play 签名密钥, 这里不构建
+      - run: ./gradlew :gkd-app:assembleGkdRelease
         env:
           GKD_GITHUB_COOKIE: ${{ secrets.GKD_GITHUB_COOKIE }}
           GKD_API_AUTH_TOKEN: ${{ secrets.GKD_API_AUTH_TOKEN }}
@@ -38,20 +36,11 @@ jobs:
           GKD_STORE_PASSWORD: ${{ secrets.GKD_STORE_PASSWORD }}
           GKD_KEY_ALIAS: ${{ secrets.GKD_KEY_ALIAS }}
           GKD_KEY_PASSWORD: ${{ secrets.GKD_KEY_PASSWORD }}
-          PLAY_STORE_FILE: ${{ github.workspace }}/play.jks
-          PLAY_STORE_PASSWORD: ${{ secrets.PLAY_STORE_PASSWORD }}
-          PLAY_KEY_ALIAS: ${{ secrets.PLAY_KEY_ALIAS }}
-          PLAY_KEY_PASSWORD: ${{ secrets.PLAY_KEY_PASSWORD }}
 
       - uses: actions/upload-artifact@v7
         with:
           name: release
           path: gkd-app/build/outputs/apk/gkd/release
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: playRelease
-          path: gkd-app/build/outputs/bundle/playRelease
 
       - uses: actions/upload-artifact@v7
         with:
