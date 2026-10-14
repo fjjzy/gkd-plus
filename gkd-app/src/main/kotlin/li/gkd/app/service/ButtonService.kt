@@ -18,7 +18,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import li.gkd.app.MainActivity
@@ -31,6 +30,7 @@ import li.gkd.app.snapshot.SnapshotCapture
 import li.gkd.app.ui.share.launchUi
 import li.gkd.app.util.AiRuleGenerator
 import li.gkd.app.util.IntentUtils
+import li.gkd.app.util.LogUtils
 import li.gkd.app.ui.component.GkIcon
 import li.gkd.app.ui.component.GkIcons
 
@@ -48,22 +48,43 @@ class ButtonService : OverlayWindowService(
 
     override fun onLongClickView() = stopSelf()
 
-    private suspend fun quickCapture() {
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // 控制栏磁贴点击：启动后直接展开菜单，由用户自己选「仅快照 / 快速识别 / 我来选择」
+        if (intent?.getBooleanExtra(EXTRA_EXPAND_MENU, false) == true) {
+            menuVisible.value = true
+        }
+        return super.onStartCommand(intent, flags, startId)
+    }
+
+    /** 仅快照：只保存快照，不登记 AI 会话、不发起识别 */
+    private suspend fun onlyCapture() {
         menuVisible.value = false
         withAllOverlaysHidden {
             SnapshotCapture.capture()
         }
     }
 
+    /** 快速识别：登记 AI 会话并发起识别；用户主动发起，不受「AI 自动识别规则」开关影响 */
+    private suspend fun quickCapture() {
+        menuVisible.value = false
+        withAllOverlaysHidden {
+            SnapshotCapture.capture(triggerAiRule = true, recordAiSession = true)
+        }
+    }
+
     private suspend fun pickAndCapture() {
         menuVisible.value = false
         withAllOverlaysHidden {
+            val startAt = System.currentTimeMillis()
             // keepStatusBar：选择器需坐标对齐；triggerAiRule=false：选完组件再决定生成
+            // recordAiSession：即使最后点了「算了」，这张快照也要能在工作台里找到
             val snapshot = SnapshotCapture.capture(
                 keepStatusBar = true,
                 triggerAiRule = false,
+                recordAiSession = true,
             )
-            // 记录待导航快 App并跳转悬浮窗内输入兼容性差）
+            val capturedAt = System.currentTimeMillis()
+            // 记录待跳转快照（悬浮窗内输入兼容性差，改跳主界面选择页）
             AiPendingNav.pendingPickerSnapshotId.value = snapshot.id
             val intent = Intent(app, MainActivity::class.java).apply {
                 addFlags(
@@ -71,6 +92,11 @@ class ButtonService : OverlayWindowService(
                 )
             }
             app.startActivity(intent)
+            // 排查「点我来选择后要等一下/再点一下才跳转」：分别看捕获耗时与启动耗时
+            LogUtils.d(
+                "我来选择: 捕获耗时=${capturedAt - startAt}ms, startActivity耗时=${System.currentTimeMillis() - capturedAt}ms",
+                loc = "ButtonService",
+            )
         }
     }
 
@@ -103,6 +129,9 @@ class ButtonService : OverlayWindowService(
                 ) {
                     MenuItem(text = "算了") {
                         lifecycleScope.launchUi { menuVisible.value = false }
+                    }
+                    MenuItem(text = "仅快照") {
+                        lifecycleScope.launchUi { onlyCapture() }
                     }
                     MenuItem(text = "快速识别") {
                         lifecycleScope.launchUi { quickCapture() }
@@ -139,12 +168,16 @@ class ButtonService : OverlayWindowService(
     }
 
     companion object {
+        private const val EXTRA_EXPAND_MENU = "expand_menu"
+
         val isRunning: StateFlow<Boolean>
             field = MutableStateFlow(false)
 
-        fun start() {
+        fun start(expandMenu: Boolean = false) {
             if (!PermissionStates.drawOverlays.checkOrToast()) return
-            IntentUtils.startForegroundServiceByClass(ButtonService::class)
+            IntentUtils.startForegroundServiceByClass(ButtonService::class) {
+                putExtra(EXTRA_EXPAND_MENU, expandMenu)
+            }
         }
 
         fun stop() = IntentUtils.stopServiceByClass(ButtonService::class)

@@ -211,8 +211,16 @@ object ToastUtils {
     }
 
     fun copyText(text: String) {
-        app.clipboardManager.setPrimaryClip(ClipData.newPlainText(app.packageName, text))
+        copyTextSilently(text)
         toast(UiStrings.copy_success)
+    }
+
+    /**
+     * 只写剪贴板、不弹「已复制」。调用方自己还要 toast 一句业务提示时用它，
+     * 否则会连弹两条（「已复制」+ 业务提示）。
+     */
+    fun copyTextSilently(text: String) {
+        app.clipboardManager.setPrimaryClip(ClipData.newPlainText(app.packageName, text))
     }
 
     fun initToast() {

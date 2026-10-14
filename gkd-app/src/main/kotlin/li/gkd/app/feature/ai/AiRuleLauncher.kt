@@ -29,7 +29,7 @@ object AiRuleLauncher {
                     time = System.currentTimeMillis(),
                 ),
             )
-            AiRuleGenerator.generateConversationRule(snapshotId, null)
+            AiRuleGenerator.startConversationRule(snapshotId, notifyUser = true)
         }
     }
 }

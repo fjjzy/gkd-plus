@@ -4,6 +4,7 @@ import li.gkd.app.ui.component.GkPageBottomSpace
 import li.gkd.app.MainViewModel
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -149,7 +150,11 @@ fun AboutPage() {
                     .itemPadding(),
             ) {
                 Text(
-                    text = "GKD Plus 是基于 GKD 的社区改版，并非 GKD 原版官方发布版本。",
+                    text = "GKD PLUS 意为搞快点，并非针对广告，而是针对用户自己想要的全部搞快点的页面，减少人类的机械操作。",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Text(
+                    text = "本软件是基于 GKD 的社区改版，并非 GKD 原版官方发布版本。",
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Bold,
                 )
@@ -229,10 +234,14 @@ fun AboutPage() {
                 }
                 Row(
                     modifier = Modifier
-                        .clickable(
+                        // 长按直接弹出主渠道的最新版本，方便查看更新弹窗内容
+                        .combinedClickable(
                             onClick = throttle {
                                 mainVm.updateStatus.checkUpdate(true)
-                            }
+                            },
+                            onLongClick = throttle {
+                                mainVm.updateStatus.previewUpdate()
+                            },
                         )
                         .fillMaxWidth()
                         .itemPadding(),

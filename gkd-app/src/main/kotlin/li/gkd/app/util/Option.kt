@@ -164,3 +164,26 @@ sealed class AutomatorModeOption(
         val objects by lazy { listOf(A11yMode, AutomationMode) }
     }
 }
+
+/**
+ * 思考等级。各家服务端的思考参数名和取值都不一样，
+ * 具体会发送什么由 [AiThinkingUtils.buildParams] 按模型名翻译。
+ */
+sealed class AiThinkingLevelOption(
+    override val value: String,
+    override val label: String,
+) : Option<String> {
+    override val options get() = objects
+
+    data object Auto : AiThinkingLevelOption("auto", "自动关闭（按模型名）")
+    data object None : AiThinkingLevelOption("none", "不发送（用服务端默认）")
+    data object Off : AiThinkingLevelOption("off", "关闭思考")
+    data object Low : AiThinkingLevelOption("low", "低")
+    data object Medium : AiThinkingLevelOption("medium", "中")
+    data object High : AiThinkingLevelOption("high", "高")
+    data object Custom : AiThinkingLevelOption("custom", "自定义 JSON")
+
+    companion object {
+        val objects by lazy { listOf(Auto, None, Off, Low, Medium, High, Custom) }
+    }
+}

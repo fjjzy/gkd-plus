@@ -11,6 +11,7 @@ import li.gkd.app.data.snapshot.SnapshotRepository
 import li.gkd.app.ui.share.BaseViewModel
 import li.gkd.app.ui.share.launchUi
 import li.gkd.app.util.AiRuleGenerator
+import li.gkd.app.util.LogUtils
 import li.gkd.app.util.keepNullJson
 import li.gkd.app.util.launchLogged
 
@@ -20,6 +21,8 @@ fun NodeInfo.toSelectedComponent(): AiSelectedComponent = AiSelectedComponent(
     vid = attr.vid ?: attr.id?.substringAfterLast('/', attr.id),
     name = attr.name,
     bounds = "${attr.left},${attr.top},${attr.right},${attr.bottom}",
+    clickable = attr.clickable,
+    longClickable = attr.longClickable,
 )
 
 class AiSnapshotPickerVm : BaseViewModel() {
@@ -35,6 +38,9 @@ class AiSnapshotPickerVm : BaseViewModel() {
                     keepNullJson.decodeFromString<ComplexSnapshot>(
                         SnapshotRepository.snapshotFile(snapshotId).readText()
                     )
+                }.onFailure { e ->
+                    // 快照文件缺失/损坏时静默失败会让选择页变成空白，这里留一条日志
+                    LogUtils.d("加载快照失败: $snapshotId", e)
                 }.getOrNull()
             }
             snapshotMutable.value = loaded
@@ -57,18 +63,25 @@ class AiSnapshotPickerVm : BaseViewModel() {
     }
 
     /**
-     * 直接生成：记录选中组件列表并后台生成规则
+     * 直接生成：记录选中组件列表并后台生成规则。
+     * 会话创建、组件写入、消息追加、发起生成必须按序完成，否则生成时可能读不到选中组件。
      */
     fun generateDirect(snapshotId: Long, appId: String, nodes: List<NodeInfo>) {
-        scope.launchUi {
+        appScope.launchLogged {
             AiRuleLauncher.ensureConversation(snapshotId, appId)
             AiConversationStore.setSelectedComponents(
                 snapshotId,
                 nodes.map { it.toSelectedComponent() },
             )
-        }
-        appScope.launchLogged {
-            AiRuleGenerator.generateConversationRule(snapshotId, null)
+            AiConversationStore.appendMessage(
+                snapshotId = snapshotId,
+                message = AiMessage(
+                    role = "user",
+                    content = "请针对我选中的组件生成规则。",
+                    time = System.currentTimeMillis(),
+                ),
+            )
+            AiRuleGenerator.startConversationRule(snapshotId, notifyUser = true)
         }
     }
 }

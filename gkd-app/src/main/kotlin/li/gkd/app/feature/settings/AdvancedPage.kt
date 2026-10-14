@@ -184,8 +184,8 @@ private fun AdvancedContent() {
 
             AdvancedSectionTitle("AI 自动规则")
             GkTextSwitch(
-                title = "启用 AI 规则",
-                subtitle = "捕获快照后自动调用大模型生成订阅规则",
+                title = "AI 自动识别规则",
+                subtitle = "无障碍自动截图、音量键截图时自动识别并生成规则",
                 checked = store.aiEnable,
                 onCheckedChange = vm::setAiEnable,
             )

@@ -24,6 +24,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,19 +32,25 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import li.gkd.app.data.settings.AiConfig
 import li.gkd.app.store.AppStore
 import li.gkd.app.ui.component.GkAlertDialog
 import li.gkd.app.ui.component.GkIcon
 import li.gkd.app.ui.component.GkIcons
 import li.gkd.app.ui.component.GkSizedIconButton
+import li.gkd.app.util.AiMaxTokensUtils
+import li.gkd.app.util.AiModelCatalogUtils
 import li.gkd.app.util.AiRuleGenerator
+import li.gkd.app.util.AiThinkingLevelOption
+import li.gkd.app.util.AiThinkingUtils
 import li.gkd.app.util.TimeUtils.throttle
-import li.gkd.app.util.ToastUtils.copyText
 import li.gkd.app.util.ToastUtils.toast
+import li.gkd.app.util.findOption
 import li.gkd.app.util.launchLogged
 
 @Composable
@@ -58,6 +65,10 @@ fun AiSettingsDialog(
     var temperatureValue by remember(aiConfig) { mutableStateOf(aiConfig.temperature.toString()) }
     var topPValue by remember(aiConfig) { mutableStateOf(aiConfig.topP.toString()) }
     var maxTokensValue by remember(aiConfig) { mutableStateOf(aiConfig.maxTokens.toString()) }
+    var thinkingLevelValue by remember(aiConfig) { mutableStateOf(aiConfig.thinkingLevel) }
+    var thinkingCustomValue by remember(aiConfig) { mutableStateOf(aiConfig.thinkingCustom) }
+    var advancedExpanded by remember { mutableStateOf(false) }
+    var thinkingMenuExpanded by remember { mutableStateOf(false) }
     var modelList by remember { mutableStateOf<List<String>>(emptyList()) }
     var modelListLoading by remember { mutableStateOf(false) }
     var modelMenuExpanded by remember { mutableStateOf(false) }
@@ -66,8 +77,16 @@ fun AiSettingsDialog(
     // 已通过测试的完整配置；点确定时若当前配置与之一致则直接保存
     var testedConfig by remember { mutableStateOf<AiConfig?>(null) }
     val scope = rememberCoroutineScope()
+    // models.dev 能力表：内置表认不出模型时用它补一句说明。
+    // 顺带把它当 remember key，拉到之后让下面的预览文案重算。
+    val capabilityCatalog by AiModelCatalogUtils.catalogFlow.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { AiModelCatalogUtils.refresh() }
 
-    fun currentConfig(temp: Float? = null, topP: Float? = null, maxTokens: Int? = null) = aiConfig.copy(
+    fun currentConfig(
+        temp: Float? = null,
+        topP: Float? = null,
+        maxTokens: Int? = null,
+    ) = aiConfig.copy(
         protocol = protocolValue,
         apiUrl = apiUrlValue,
         apiKey = apiKeyValue,
@@ -75,7 +94,20 @@ fun AiSettingsDialog(
         temperature = temp ?: temperatureValue.toFloatOrNull() ?: aiConfig.temperature,
         topP = topP ?: topPValue.toFloatOrNull() ?: aiConfig.topP,
         maxTokens = maxTokens ?: maxTokensValue.toIntOrNull() ?: aiConfig.maxTokens,
+        thinkingLevel = thinkingLevelValue,
+        thinkingCustom = thinkingCustomValue,
     )
+
+    // 能力表拉到后重算一次，让「将发送」的说明带上 models.dev 的补充
+    val thinkingPreview = remember(
+        aiConfig,
+        modelValue,
+        thinkingLevelValue,
+        thinkingCustomValue,
+        capabilityCatalog,
+    ) {
+        AiThinkingUtils.describe(currentConfig())
+    }
 
     fun saveConfig(config: AiConfig) {
         AppStore.updateSettings {
@@ -88,6 +120,8 @@ fun AiSettingsDialog(
                     temperature = config.temperature,
                     topP = config.topP,
                     maxTokens = config.maxTokens,
+                    thinkingLevel = config.thinkingLevel,
+                    thinkingCustom = config.thinkingCustom,
                 )
             )
         }
@@ -97,11 +131,10 @@ fun AiSettingsDialog(
 
     fun onFailedTest(e: Throwable) {
         val reason = AiRuleGenerator.analyzeConnectionError(e)
-        val fullError = "AI 规则配置连接测试失败：\n${e.message ?: e.toString()}\n\n分析：$reason"
-        // 错误信息已复制到剪贴板，方便去问其他 AI
-        copyText(fullError)
+        // toast 只说看得懂的原因，完整报错进剪贴板（方便拿去问其它 AI 或提 issue）
+        AiRuleGenerator.copyFailureToClipboard("AI 规则配置连接测试失败", e, reason)
         testResult = "失败：$reason（详情已复制）"
-        toast("连接测试失败：$reason\n（错误详情已复制到剪贴板）")
+        toast("连接测试失败：$reason（完整报错已复制）")
     }
 
     GkAlertDialog(
@@ -248,7 +281,9 @@ fun AiSettingsDialog(
                                     modelMenuExpanded = list.isNotEmpty()
                                     toast("获取到 ${list.size} 个模型")
                                 }.onFailure { e ->
-                                    toast("获取模型列表失败：${e.message}")
+                                    val reason = AiRuleGenerator.analyzeConnectionError(e)
+                                    AiRuleGenerator.copyFailureToClipboard("获取模型列表失败", e, reason)
+                                    toast("获取模型列表失败：$reason（完整报错已复制）")
                                 }
                             }
                         },
@@ -256,36 +291,126 @@ fun AiSettingsDialog(
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
+
+                // 高级设置：默认收起，思考等级和采样参数不该干扰主流程
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(MaterialTheme.shapes.small)
+                        .clickable { advancedExpanded = !advancedExpanded }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    OutlinedTextField(
-                        label = { Text("Temperature") },
-                        value = temperatureValue,
-                        onValueChange = { temperatureValue = it },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    GkIcon(
+                        imageVector = if (advancedExpanded) GkIcons.ExpandLess else GkIcons.ExpandMore,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp),
                     )
+                    Text(text = "高级设置", style = MaterialTheme.typography.labelLarge)
+                }
+                if (advancedExpanded) {
+                    Text(text = "思考等级", style = MaterialTheme.typography.labelMedium)
+                    Box {
+                        TextButton(onClick = { thinkingMenuExpanded = true }) {
+                            Text(text = AiThinkingLevelOption.objects.findOption(thinkingLevelValue).label)
+                            GkIcon(
+                                imageVector = GkIcons.ExpandMore,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = thinkingMenuExpanded,
+                            onDismissRequest = { thinkingMenuExpanded = false },
+                        ) {
+                            AiThinkingLevelOption.objects.forEach { option ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = option.label,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = if (option.value == thinkingLevelValue) {
+                                                MaterialTheme.colorScheme.primary
+                                            } else {
+                                                LocalContentColor.current
+                                            },
+                                        )
+                                    },
+                                    onClick = {
+                                        thinkingLevelValue = option.value
+                                        thinkingMenuExpanded = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        text = thinkingPreview,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (thinkingLevelValue == AiThinkingLevelOption.Custom.value) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            label = { Text("自定义请求参数 (JSON)") },
+                            value = thinkingCustomValue,
+                            placeholder = { Text(text = "{\"thinking\":{\"type\":\"disabled\"}}") },
+                            onValueChange = { thinkingCustomValue = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 2,
+                        )
+                        AiThinkingUtils.validateCustom(thinkingCustomValue)?.let { hint ->
+                            Text(
+                                text = hint,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedTextField(
+                            label = { Text("Temperature") },
+                            value = temperatureValue,
+                            onValueChange = { temperatureValue = it },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        )
+                        OutlinedTextField(
+                            label = { Text("Top P") },
+                            value = topPValue,
+                            onValueChange = { topPValue = it },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
-                        label = { Text("Top P") },
-                        value = topPValue,
-                        onValueChange = { topPValue = it },
+                        label = { Text("Max Tokens") },
+                        value = maxTokensValue,
+                        onValueChange = { maxTokensValue = it },
                         singleLine = true,
-                        modifier = Modifier.weight(1f),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
+                    Text(
+                        text = buildString {
+                            append("低于 ${AiMaxTokensUtils.MIN_MAX_TOKENS} 会在生成时自动抬到该值并保存")
+                            if (aiConfig.maxTokensCeiling > 0) {
+                                append("\n服务端上限：${aiConfig.maxTokensCeiling}（曾被拒，不再上调）")
+                            }
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    label = { Text("Max Tokens") },
-                    value = maxTokensValue,
-                    onValueChange = { maxTokensValue = it },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // Test button

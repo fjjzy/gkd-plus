@@ -241,13 +241,15 @@ object SnapshotCapture {
     suspend fun capture(
         forcedCropStatusBar: Boolean = false,
         keepStatusBar: Boolean = false,
-        triggerAiRule: Boolean = true,
+        triggerAiRule: Boolean = false,
+        recordAiSession: Boolean = false,
     ): ComplexSnapshot {
         val service = A11yRuntime.service ?: throw RpcError(UiStrings.service_unavailable_authorize)
         if (!captureMutex.tryLock()) {
             throw RpcError(UiStrings.snapshot_save_in_progress)
         }
         try {
+            val startAt = System.currentTimeMillis()
             val rootNode = A11yRuntime.getRoot(service)
                 ?: throw RpcError(UiStrings.snapshot_app_a11y_missing)
             val snapshotId = System.currentTimeMillis()
@@ -278,11 +280,13 @@ object SnapshotCapture {
                 }
             }
 
+            val gatheredAt = System.currentTimeMillis()
             try {
                 SnapshotRepository.save(snapshot, screenResult.bitmap)
             } finally {
                 screenResult.bitmap.recycle()
             }
+            val savedAt = System.currentTimeMillis()
             val savedToDownloads = if (
                 storeFlow.value.autoSaveSnapshotToDownloads && SystemDownloads.canSave()
             ) {
@@ -308,6 +312,11 @@ object SnapshotCapture {
             } else {
                 false
             }
+            // 排查「点我来选择后卡一下」：看采集/存盘/下载各占多少
+            LogUtils.d(
+                "快照耗时: 采集=${gatheredAt - startAt}ms, 存盘=${savedAt - gatheredAt}ms, 下载=${System.currentTimeMillis() - savedAt}ms",
+                loc = "SnapshotCapture",
+            )
             val appName = snapshot.appInfo?.name ?: snapshot.appId
             NotificationCatalog.snapshotSaved(
                 appName = appName,
@@ -322,13 +331,16 @@ object SnapshotCapture {
                 UiStrings.snapshot_saved_warning(statusDetail)
             }
             toast(toastText, forced = true)
-            if (triggerAiRule && storeFlow.value.aiEnable) {
+            // recordAiSession：登记到 AI 规则工作台，便于之后回溯
+            // triggerAiRule：本次是否发起识别；是否识别由调用方决定（自动来源在调用方读「AI 自动识别规则」开关）
+            if (recordAiSession || triggerAiRule) {
                 appScope.launchLogged {
-                    // 在工作台登记该快照的 AI 会话，便于追溯
                     AiConversationStore.upsert(
                         AiConversation(snapshotId = snapshot.id, appId = snapshot.appId)
                     )
-                    AiRuleGenerator.generateRule(snapshot.id)
+                    if (triggerAiRule) {
+                        AiRuleGenerator.startAutoRule(snapshot.id)
+                    }
                 }
             }
             return snapshot

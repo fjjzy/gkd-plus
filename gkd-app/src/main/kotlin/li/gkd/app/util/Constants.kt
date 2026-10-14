@@ -11,6 +11,19 @@ const val ISSUES_URL = "${REPOSITORY_URL}/issues"
 
 const val HOME_PAGE_URL = "https://gkd.li"
 
+// 更新兜底数据源, 主渠道 (GitHub) 不可达时提供版本号与夸克网盘下载链接,
+// 多个源并发请求并取版本号最大者; 留空则跳过该源
+// Gitee 仓库 raw 文件, 响应直接就是版本信息 JSON:
+// https://gitee.com/{owner}/{repo}/raw/{branch}/{path}
+// npm 包清单 (npmmirror 是国内只读镜像, CI 发布 npm 包后自动同步), 版本信息放在清单的
+// gkdPlus 自定义字段里; 不能读 `latest/files/*`, 那个接口只对白名单包开放:
+// https://registry.npmmirror.com/{package}/latest
+const val GITEE_FALLBACK_VERSION_URL =
+    "https://gitee.com/fjjzy/gkd-plus/raw/master/version.json"
+
+const val NPM_FALLBACK_VERSION_URL =
+    "https://registry.npmmirror.com/gkd-plus-version/latest"
+
 
 object ShortUrlSet {
     const val URL1 = "https://gkd.li?r=1"

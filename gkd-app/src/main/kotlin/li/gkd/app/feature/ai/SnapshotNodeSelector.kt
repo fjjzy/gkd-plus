@@ -28,7 +28,7 @@ import li.gkd.app.data.NodeInfo
 /**
  * 快照组件选择器：
  * - 点击截图命中节点（选面积最小的命中者）
- * - 扩大 = 选中其父节点；缩小 = 选中其最小子节点
+ * - 扩大 = 选中其父节点；缩小 = 沿原路退回上一次扩大的节点（历史由调用方维护）
  * - 通过回调通知当前选中节点
  */
 @Composable
@@ -112,14 +112,4 @@ fun SnapshotNodeSelector(
 fun expandSelection(nodes: List<NodeInfo>, current: NodeInfo?): NodeInfo? {
     if (current == null) return null
     return nodes.find { it.id == current.pid }
-}
-
-/**
- * 缩最小的可见子节点（null 表示无子节点）
- */
-fun shrinkSelection(nodes: List<NodeInfo>, current: NodeInfo?): NodeInfo? {
-    if (current == null) return null
-    return nodes
-        .filter { it.pid == current.id && it.attr.visibleToUser }
-        .minByOrNull { it.attr.width * it.attr.height }
 }

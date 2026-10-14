@@ -180,11 +180,11 @@ fun SnapshotPreviewPage(route: SnapshotPreviewRoute) {
                     onDismissRequest = { aiRuleRequest = null },
                     onDirectGenerate = {
                         aiRuleRequest = null
+                        // 开始/成功/失败由 directGenerate 自己 toast，这里不再叠一条
                         li.gkd.app.feature.ai.AiRuleLauncher.directGenerate(
                             snapshot.id,
                             snapshot.appId,
                         )
-                        li.gkd.app.util.ToastUtils.toast("已开始生成 AI 规则")
                     },
                     onConversationGenerate = {
                         val target = snapshot

@@ -130,8 +130,8 @@ fun AiWorkbenchPage() {
             item(key = "ai-settings") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     GkTextSwitch(
-                        title = "启用 AI 规则",
-                        subtitle = "捕获快照后自动调用大模型生成订阅规则",
+                        title = "AI 自动识别规则",
+                        subtitle = "无障碍自动截图、音量键截图时自动识别并生成规则",
                         checked = store.aiEnable,
                         onCheckedChange = vm::setAiEnable,
                     )
@@ -228,10 +228,11 @@ private fun ConversationCard(
                     )
                 }
                 val statusText = when (conversation.status) {
-                    AiConversation.STATUS_GENERATING -> "生成中..."
+                    AiConversation.STATUS_GENERATING -> "回复中..."
                     AiConversation.STATUS_RULE_READY -> "规则待加入"
-                    AiConversation.STATUS_SUCCESS -> "已生成规则"
-                    AiConversation.STATUS_FAILED -> "生成失败"
+                    AiConversation.STATUS_ACCEPTED -> "已加入"
+                    AiConversation.STATUS_SUCCESS -> "已回复"
+                    AiConversation.STATUS_FAILED -> "回复失败"
                     else -> if (conversation.messages.isEmpty()) "待发起" else "对话中"
                 }
                 Text(

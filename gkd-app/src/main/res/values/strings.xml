@@ -944,6 +944,7 @@
     <string name="update_interval_three_days">每3天</string>
     <string name="update_interval_weekly">每7天</string>
     <string name="update_new_version">新版本</string>
+    <string name="update_quark">夸克网盘</string>
     <string name="update_ready_to_install">可继续选择安装新版本</string>
     <string name="update_success">更新成功</string>
     <string name="update_time_description">更新时间 %1$s</string>

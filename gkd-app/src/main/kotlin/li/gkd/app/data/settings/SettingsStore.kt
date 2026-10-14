@@ -5,6 +5,7 @@ import li.gkd.app.text.UiStrings
 import li.gkd.app.META
 import li.gkd.app.util.AppGroupOption
 import li.gkd.app.util.AppSortOption
+import li.gkd.app.util.AiThinkingLevelOption
 import li.gkd.app.util.AutomatorModeOption
 import li.gkd.app.util.RuleSortOption
 import li.gkd.app.util.SnapshotDisplayModeOption
@@ -19,7 +20,16 @@ data class AiConfig(
     val model: String = "",
     val temperature: Float = 0f,
     val topP: Float = 1f,
-    val maxTokens: Int = 4096,
+    val maxTokens: Int = 32768,
+    /**
+     * 服务端拒绝过的 Max Tokens（0 = 还没探到）。
+     * 记下来才能避免「抬底 → 被拒 → 回退」每次生成都往返一次。
+     */
+    val maxTokensCeiling: Int = 0,
+    /** 思考等级，取值见 [li.gkd.app.util.AiThinkingLevelOption]；默认自动关闭思考 */
+    val thinkingLevel: String = AiThinkingLevelOption.Auto.value,
+    /** thinkingLevel 为自定义时，直接合并进请求体的 JSON 片段 */
+    val thinkingCustom: String = "",
 )
 
 @Serializable
@@ -73,6 +83,8 @@ data class SettingsStore(
     val snapshotDisplayMode: Int = SnapshotDisplayModeOption.ByTime.value,
     val aiEnable: Boolean = false,
     val aiConfig: AiConfig = AiConfig(),
+    /** 多选组件时「可以用第 N 个指代」的提示已展示次数；提醒两次后不再打扰 */
+    val aiMultiSelectHintCount: Int = 0,
 ) {
     val useA11y get() = automatorMode == AutomatorModeOption.A11yMode.value
     val useAutomation get() = automatorMode == AutomatorModeOption.AutomationMode.value

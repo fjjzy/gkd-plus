@@ -105,6 +105,36 @@ class AppConfigVm(
 
     suspend fun applySwitches(request: RuleSwitchRequest, setting: RuleSetting) = RuleGroupConfigService.apply(request, setting)
 
+    /**
+     * 删除选中的规则组：只允许本地订阅；按订阅分组后逐个从订阅里移除，返回实际删除的数量。
+     */
+    suspend fun deleteSelectedGroups(targets: Set<RuleGroupTarget>): Int {
+        if (targets.isEmpty()) return 0
+        check(targets.all { it.subsId < 0 }) { UiStrings.remote_rule_delete_unsupported }
+        var deletedSize = 0
+        targets.groupBy { it.subsId }.forEach { (subsId, subsTargets) ->
+            SubscriptionRepository.update(subsId) { current ->
+                current.edit {
+                    subsTargets.forEach { target ->
+                        when (target) {
+                            is RuleGroupTarget.App -> {
+                                deletedSize += removeAppGroups(
+                                    appId = target.appId,
+                                    removeAppIfEmpty = true,
+                                ) { it.key == target.groupKey }.size
+                            }
+
+                            is RuleGroupTarget.Global -> {
+                                deletedSize += removeGlobalGroups { it.key == target.groupKey }.size
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return deletedSize
+    }
+
     suspend fun buildSelectedGroupsText(selectedGroups: Set<RuleGroupTarget>): String =
         withContext(Dispatchers.Default) {
             val selectedKeys = selectedGroups.mapTo(mutableSetOf()) {

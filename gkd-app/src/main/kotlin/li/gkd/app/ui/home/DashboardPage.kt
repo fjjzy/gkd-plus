@@ -258,6 +258,16 @@ fun useDashboardPage(): ScaffoldExt {
                     mainVm.navigatePage(li.gkd.app.feature.ai.AiWorkbenchRoute)
                 })
 
+            var showManualUpdateDialog by remember { mutableStateOf(false) }
+            PageItemCard(
+                title = "手动更新 APP",
+                subtitle = "无加速器从此处手动更新最新版",
+                imageVector = GkIcons.Autorenew,
+                onClickLabel = "打开手动更新下载弹窗",
+                onClick = {
+                    showManualUpdateDialog = true
+                })
+
             PageSwitchItemCard(
                 imageVector = GkIcons.Notifications,
                 title = UiStrings.persistent_notification,
@@ -308,15 +318,6 @@ fun useDashboardPage(): ScaffoldExt {
                     mainVm.navigatePage(WebViewRoute(initUrl = HOME_PAGE_URL))
                 })
 
-            var showManualUpdateDialog by remember { mutableStateOf(false) }
-            PageItemCard(
-                title = "手动更新 APP",
-                subtitle = "无加速器从此处手动更新最新版",
-                imageVector = GkIcons.Autorenew,
-                onClickLabel = "打开手动更新下载弹窗",
-                onClick = {
-                    showManualUpdateDialog = true
-                })
             ManualUpdateDialog(
                 visible = showManualUpdateDialog,
                 onDismissRequest = { showManualUpdateDialog = false },

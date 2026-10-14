@@ -83,6 +83,7 @@ import li.gkd.app.feature.ai.AiConversationRoute
 import li.gkd.app.feature.ai.AiSnapshotPickerPage
 import li.gkd.app.feature.ai.AiSnapshotPickerRoute
 import li.gkd.app.feature.ai.AiPendingNav
+import li.gkd.app.util.LogUtils
 
 private val editorTransitions = NavDisplay.transitionSpec {
     (slideInVertically(tween(250)) { it / 8 } + fadeIn(tween(250))) togetherWith fadeOut(tween(150))
@@ -135,6 +136,8 @@ fun MainNavigation() {
     LaunchedEffect(Unit) {
         AiPendingNav.pendingPickerSnapshotId.collect { pending ->
             if (pending != null && AiPendingNav.consume() != null) {
+                // 与 ButtonService 的「我来选择」日志对照，可看出 startActivity 到真正跳转的延迟
+                LogUtils.d("消费待跳转快照: $pending", loc = "MainNavigation")
                 mainVm.navigatePage(AiSnapshotPickerRoute(pending))
             }
         }

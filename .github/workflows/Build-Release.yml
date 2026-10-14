@@ -9,6 +9,8 @@ jobs:
   build:
     permissions:
       contents: write
+      # Trusted Publishing (OIDC) 发布 npm 包所需
+      id-token: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -57,7 +59,7 @@ jobs:
           path: gkd-app/build/outputs
 
       - run: |
-          cp outputs/apk/gkd/release/app-gkd-release.apk "${GITHUB_WORKSPACE}/gkd-${GITHUB_REF_NAME}.apk"
+          cp outputs/apk/gkd/release/gkd-app-gkd-release.apk "${GITHUB_WORKSPACE}/gkd-${GITHUB_REF_NAME}.apk"
           zip -r "${GITHUB_WORKSPACE}/outputs-${GITHUB_REF_NAME}.zip" outputs
         working-directory: gkd-app/build
 
@@ -71,3 +73,75 @@ jobs:
           files: |
             gkd-*.apk
             outputs-*.zip
+
+      # 同步版本号到 Gitee 仓库的 version.json, 作为 App 在 GitHub 不可达时的更新兜底
+      # 只覆盖 versionCode/versionName, quarkUrl/desc 保留 Gitee 上手动维护的值
+      # 需要仓库 secret: GITEE_TOKEN (Gitee 私人令牌, 具备 projects 读写权限)
+      - name: update gitee version.json
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          set -euo pipefail
+          metadata=gkd-app/build/outputs/apk/gkd/release/output-metadata.json
+          version_code=$(jq -r '.elements[0].versionCode' "${metadata}")
+          version_name=$(jq -r '.elements[0].versionName' "${metadata}")
+
+          repo=fjjzy/gkd-plus
+          branch=master
+          path=version.json
+          api="https://gitee.com/api/v5/repos/${repo}/contents/${path}"
+
+          current=$(curl -sSf "${api}?access_token=${GITEE_TOKEN}&ref=${branch}")
+          sha=$(jq -r '.sha' <<<"${current}")
+          json=$(jq -r '.content' <<<"${current}" | base64 -d)
+          updated=$(jq --argjson code "${version_code}" --arg name "${version_name}" \
+            '.versionCode = $code | .versionName = $name' <<<"${json}")
+          content=$(base64 -w0 <<<"${updated}")
+
+          status=$(curl -sS -o /tmp/gitee-response.json -w '%{http_code}' -X PUT "${api}" \
+            --data-urlencode "access_token=${GITEE_TOKEN}" \
+            --data-urlencode "branch=${branch}" \
+            --data-urlencode "message=chore: bump to ${version_name} (${version_code})" \
+            --data-urlencode "sha=${sha}" \
+            --data-urlencode "content=${content}")
+          if [ "${status}" != "200" ] && [ "${status}" != "201" ]; then
+            echo "gitee update failed (HTTP ${status}):" >&2
+            cat /tmp/gitee-response.json >&2
+            exit 1
+          fi
+          echo "gitee ${path} updated to ${version_name} (${version_code})"
+
+      # 发布 npm 包 gkd-plus-version, npmmirror 会自动同步, 作为 App 的第三个更新兜底源
+      # 版本信息复用上一步已更新的 Gitee version.json, 写进包清单的自定义字段 gkdPlus
+      # (App 读 https://registry.npmmirror.com/gkd-plus-version/latest; npmmirror 的
+      #  latest/files/* 只对白名单包开放, 取不了包内文件)
+      # 用 Trusted Publishing (OIDC) 发布, 不存任何 npm token; 依赖上面的 id-token: write
+      # 以及 npmjs.com 上 gkd-plus-version 的 trusted publisher 配置:
+      # fjjzy/gkd-plus + Build-Release.yml, 且勾选允许 npm publish (不只是 stage publish)
+      - uses: actions/setup-node@v7
+        with:
+          # Trusted Publishing 要求 npm CLI >= 11.5.1, 即 Node >= 22.14
+          node-version: '24'
+
+      - name: publish version.json to npm
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          set -euo pipefail
+          metadata=gkd-app/build/outputs/apk/gkd/release/output-metadata.json
+          version_code=$(jq -r '.elements[0].versionCode' "${metadata}")
+
+          pkg=$(mktemp -d)
+          curl -sSf "https://gitee.com/api/v5/repos/fjjzy/gkd-plus/contents/version.json?access_token=${GITEE_TOKEN}&ref=master" \
+            | jq -r '.content' | base64 -d \
+            | jq --arg v "1.0.${version_code}" \
+                '{name:"gkd-plus-version",version:$v,description:"gkd-plus update fallback metadata",license:"MIT",gkdPlus:.}' \
+            > "${pkg}/package.json"
+
+          cd "${pkg}"
+          # npm 兜底源发布失败不应阻塞发版, 主源与 Gitee 兜底仍然可用
+          if npm publish; then
+            echo "npm gkd-plus-version published as 1.0.${version_code}"
+          else
+            echo "::warning::npm publish failed, npm fallback source will stay stale"
+          fi

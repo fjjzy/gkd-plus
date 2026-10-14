@@ -253,6 +253,35 @@ fun AppConfigPage(route: AppConfigRoute) {
                                 onDismiss = dismiss,
                                 onUpdate = updateSelected,
                             )
+                            // 远程订阅的规则会被订阅更新覆盖，只有本地订阅可删除
+                            val canDelete = selectedDataSet.isNotEmpty() &&
+                                selectedDataSet.all { it.subsId < 0 }
+                            GkBatchActionMenuItem(
+                                text = UiStrings.action_delete,
+                                enabled = canDelete,
+                                onDismiss = dismiss,
+                                onClick = {
+                                    val targetsToDelete = selectedDataSet
+                                    scope.launchUi {
+                                        vm.runBatchAction {
+                                            if (!mainVm.dialogRequests.confirm(
+                                                title = UiStrings.rule_delete,
+                                                text = UiStrings.rule_groups_delete_confirmation(targetsToDelete.size),
+                                                error = true,
+                                            )) return@runBatchAction
+                                            val deletedSize = vm.deleteSelectedGroups(targetsToDelete)
+                                            selectionState.removeDeleted(targetsToDelete)
+                                            toast(
+                                                if (deletedSize > 0) {
+                                                    UiStrings.rule_groups_deleted_count(deletedSize)
+                                                } else {
+                                                    UiStrings.selected_rules_changed
+                                                }
+                                            )
+                                        }
+                                    }
+                                },
+                            )
                         }
                     } else {
                         var expanded by remember { mutableStateOf(false) }

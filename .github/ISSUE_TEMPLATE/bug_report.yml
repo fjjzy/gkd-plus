@@ -1,7 +1,7 @@
 name: 错误反馈 / Bug report
 title: "[BUG] "
 description: 反馈你遇到的错误 / Report the bug you encountered
-labels: ["pending triage"]
+labels: ["needs-triage"]
 
 body:
   - type: markdown
@@ -9,9 +9,9 @@ body:
       value: |
         ## 感谢您花时间填写，在提交问题之前，请确保您完成以下操作
         1. 请 **确保** 您已经查阅了 [GKD 官方文档](https://gkd.li) 以及 [常见问题](https://gkd.li/guide/faq)
-        2. 请 **判断** 是不是第三方规则订阅的问题，如果是，你应该向规则提供者反馈，而不是在这里提交，**此处只接受 GKD 应用本体的问题**
-        3. 请 **确保** 已有的 [问题](https://github.com/gkd-kit/gkd/issues?q=is%3Aissue) 或 [讨论](https://github.com/orgs/gkd-kit/discussions?discussions_q=) 中没有人提交过相似问题，否则请在该问题下进行讨论
-        4. 请 **确保** 你的问题能在 [releases](https://github.com/gkd-kit/gkd/releases/latest) 发布的最新版本(包含测试版本)上复现 (如果不是请先更新到最新版本复现后再提交问题)
+        2. 请 **判断** 是不是第三方规则订阅的问题，如果是，你应该向规则提供者反馈，而不是在这里提交，**此处只接受 GKD-Plus 应用本体的问题**
+        3. 请 **确保** 已有的 [问题](https://github.com/fjjzy/gkd-plus/issues?q=is%3Aissue) 或 [讨论](https://github.com/fjjzy/gkd-plus/discussions) 中没有人提交过相似问题，否则请在该问题下进行讨论
+        4. 请 **确保** 你的问题能在 [releases](https://github.com/fjjzy/gkd-plus/releases/latest) 发布的最新版本(包含测试版本)上复现 (如果不是请先更新到最新版本复现后再提交问题)
   - type: textarea
     id: log-file
     attributes:

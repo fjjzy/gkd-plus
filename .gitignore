@@ -20,3 +20,16 @@ kotlin-js-store
 *.zip
 local.properties
 libs.versions.updates.toml
+
+# 本地 Gitee 令牌：仅本机使用，不入库
+/.gitee-token
+
+# 本地安装的 agent skills：仅本机使用，不入库
+# android-api-diff 已由仓库跟踪，保持跟踪
+/.agents/skills/*
+!/.agents/skills/android-api-diff/
+/.agents/skills-lock.json
+/skills
+
+# 本地 agent 工作流文档：仅本机使用，不入库
+/docs/agents/

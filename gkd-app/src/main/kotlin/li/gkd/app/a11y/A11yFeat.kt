@@ -92,7 +92,8 @@ private fun watchCaptureScreenshot() {
         if (it == null) return
     }
     appScope.launchLogged {
-        SnapshotCapture.capture()
+        // 自动来源：是否识别由「AI 自动识别规则」开关决定
+        SnapshotCapture.capture(triggerAiRule = storeFlow.value.aiEnable)
     }
 }
 
@@ -136,13 +137,14 @@ private fun createVolumeReceiver() = object : BroadcastReceiver() {
     var lastVolumeTriggerTime = -1L
     override fun onReceive(context: Context?, intent: Intent?) {
         if (intent?.action == volumeChangedAction) {
-            val t = System.currentTimeMillis()
-            if (t - lastVolumeTriggerTime > 3000 && !ScreenUtils.isScreenLock()) {
-                lastVolumeTriggerTime = t
-                appScope.launchLogged {
-                    SnapshotCapture.capture()
+                val t = System.currentTimeMillis()
+                if (t - lastVolumeTriggerTime > 3000 && !ScreenUtils.isScreenLock()) {
+                    lastVolumeTriggerTime = t
+                    appScope.launchLogged {
+                        // 自动来源：是否识别由「AI 自动识别规则」开关决定
+                        SnapshotCapture.capture(triggerAiRule = storeFlow.value.aiEnable)
+                    }
                 }
-            }
         }
     }
 }
