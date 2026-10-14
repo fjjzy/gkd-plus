@@ -1,12 +1,16 @@
 # 更新内容
 
-- 优化快照结果提示文案
-- 修复某些场景无障碍服务状态判断错误
-- 修复某些设备新安装应用后对应规则不启用
+- 新增 AI 规则工作台：按应用保存会话，可回看历史、继续追问
+- 新增快照选择器：可缩放选择范围、多选组件、查看组件属性，支持「直接生成」与「对话生成」
+- 新增悬浮按钮菜单（仅快照 / 快速识别 / 我来选择）：「快速识别」直接生成并加入规则
+- 手动生成（「直接生成」「对话生成」）生成后先查看，点「加入规则」再入库
+- 新增思考等级自适应：按模型名自动匹配思考参数（Claude / GPT-5 / 智谱 GLM / 豆包 / 千问 / DeepSeek 等），也支持手写自定义 JSON
+- 新增 Max Tokens 自适应：预算偏小时自动抬底、输出被截断时翻倍、被服务端拒绝时回退并记住上限
+- 更新检查支持多源兜底：GitHub 不可达时回退 Gitee / npm 镜像，并可经夸克网盘下载
+- 移除「加强模式」
+- 导出日志可选择附加最近 1 / 3 / 7 天的快照（节点 JSON + 截图），便于排查
 
 ## 更新方式
 
-- GKD - 设置 - 关于 - 检测更新
-- 下列方式之一
-
-<a href="https://gkd.li/guide/"><img src="https://e.gkd.li/f23b704d-d781-494b-9719-393f95683b89" alt="Download from GKD.LI" width="32%" /></a><a href="https://play.google.com/store/apps/details?id=li.songe.gkd"><img src="https://e.gkd.li/f63fabeb-0342-4961-a46d-cac61b0f8856" alt="Download from Google Play" width="32%" /></a><a href="https://github.com/gkd-kit/gkd/releases"><img src="https://e.gkd.li/c1ef2bb9-7472-46d5-9806-81b4c37e5b4d" alt="Download from GitHub releases" width="32%" /></a>
+- 应用内 `设置 - 关于 - 检查更新`
+- 或到 [Releases](https://github.com/fjjzy/gkd-plus/releases/latest) 下载最新 APK
