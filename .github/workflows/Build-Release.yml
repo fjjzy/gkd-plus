@@ -121,10 +121,12 @@ jobs:
           version_code=$(jq -r '.elements[0].versionCode' "${metadata}")
 
           pkg=$(mktemp -d)
+          # repository 字段必需: 带 provenance 的发布(npm trusted publishing)会校验
+          # package.json 的 repository.url 与 GitHub 仓库一致, 缺失会 422
           curl -sSf "https://gitee.com/api/v5/repos/fjjzy/gkd-plus/contents/version.json?access_token=${GITEE_TOKEN}&ref=master" \
             | jq -r '.content' | base64 -d \
             | jq --arg v "1.0.${version_code}" \
-                '{name:"gkd-plus-version",version:$v,description:"gkd-plus update fallback metadata",license:"MIT",gkdPlus:.}' \
+                '{name:"gkd-plus-version",version:$v,description:"gkd-plus update fallback metadata",license:"MIT",repository:"https://github.com/fjjzy/gkd-plus",gkdPlus:.}' \
             > "${pkg}/package.json"
 
           cd "${pkg}"
