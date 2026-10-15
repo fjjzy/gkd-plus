@@ -105,6 +105,23 @@
 **改动文件**
 - `gkd-app/src/main/kotlin/li/gkd/app/feature/settings/AboutPage.kt`
 
+### 11. 简易规则
+
+在 `应用规则` 页右下角展开按钮中提供「简易规则」入口，填定位文字或控件 ID 即可生成一条规则，无需手写选择器。
+
+- 文字 / ID 二选一，都填时优先按 ID；选择器分别为 `[text="..."]` 与 `[id="..."]`，值内的 `\` 与 `"` 会转义
+- 可选「通过返回键关闭」：动作为 `back`，否则为 `click`
+- 规则名取文字（文字为空时取 ID），追加到本地订阅（`LOCAL_SUBS_ID`）的当前应用下；同名规则自动加 `-2`、`-3` 后缀，不覆盖已有规则
+- 与同菜单里的「完整规则」（跳转规则编辑页）并列
+
+**新增文件**
+- `gkd-app/src/main/kotlin/li/gkd/app/ui/SimpleRuleDialog.kt` — 简易规则弹窗（文字 / ID 输入、「通过返回键关闭」开关、输入示例）
+
+**改动文件**
+- `gkd-app/src/main/kotlin/li/gkd/app/ui/AppConfigPage.kt` — 右下角悬浮按钮展开菜单新增「简易规则 / 完整规则」入口
+- `gkd-app/src/main/kotlin/li/gkd/app/ui/AppConfigVm.kt` — 新增 `addSimpleRule`，生成规则组并追加到本地订阅
+- `gkd-app/src/main/res/values/strings.xml` — `rule_add_simple` / `rule_add_full` / `simple_rule_*` 文案
+
 ---
 
 ## 二、品牌与构建配置

@@ -3,10 +3,7 @@
 [English](README_EN.md) | **简体中文**
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="gkd-app/src/main/res/mipmap/gkd_white.png">
-    <img src="gkd-app/src/main/res/mipmap/gkd_black.png" width="96" alt="GKD-Plus">
-  </picture>
+  <img src="docs/images/icon.png" width="96" alt="GKD-Plus">
 </p>
 
 <p align="center">
@@ -47,6 +44,15 @@ GKD 是一个基于[高级选择器](https://gkd.li/guide/selector)、[订阅规
 ### AI 配置备份/恢复
 
 - 大模型配置（API URL、Key、模型等）纳入备份/导入体系
+
+### 简易规则
+
+参考李跳跳，不想写选择器时，可以在 `应用规则` 页点右下角展开按钮，选「简易规则」直接加一条：
+
+- 填「文字」或「ID」其一即可生成规则，生成后追加到本地订阅的当前应用下
+- 文字填界面上出现的文字（如「跳过」「关闭」「我知道了」），ID 填控件的 resource-id（如 `com.example:id/close`）；两者都填时优先按 ID 匹配
+- 可选「通过返回键关闭」：开启后动作为返回键，关闭则点击匹配到的元素
+- 同名规则自动加 `-2`、`-3` 后缀，不会覆盖已有规则
 
 ## 安装
 

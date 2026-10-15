@@ -3,10 +3,7 @@
 **English** | [简体中文](README.md)
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="gkd-app/src/main/res/mipmap/gkd_white.png">
-    <img src="gkd-app/src/main/res/mipmap/gkd_black.png" width="96" alt="GKD-Plus">
-  </picture>
+  <img src="docs/images/icon.png" width="96" alt="GKD-Plus">
 </p>
 
 <p align="center">
@@ -47,6 +44,15 @@ GKD is a custom Android screen-clicking app built on [advanced selectors](https:
 ### AI Configuration Backup and Restore
 
 - Large model settings, including API URL, API key, and model name, are included in backup/import flows
+
+### Simple Rules
+
+If you would rather not write selectors, open the `App rules` page, tap the expand button in the bottom-right corner and pick "Simple rule":
+
+- Fill in either "Text" or "ID" to generate a rule, which is then appended to the current app under your local subscription
+- Text is the wording shown on screen (e.g. "Skip", "Close"); ID is the component's resource-id (e.g. `com.example:id/close`). When both are filled in, ID takes precedence
+- Optional "Close with back key": the action becomes the back key instead of clicking the matched node
+- Duplicate names get a `-2` / `-3` suffix, so existing rules are never overwritten
 
 ## Install
 
