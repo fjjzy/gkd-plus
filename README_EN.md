@@ -3,7 +3,18 @@
 **English** | [简体中文](README.md)
 
 <p align="center">
+  Model sponsor: <a href="https://xbcl.link/register?aff=N5TPL7ETW65W">xbcl</a> — Opus / GPT text &amp; image models at 20% of list price
+</p>
+
+<p align="center">
   <img src="docs/images/icon.png" width="96" alt="GKD-Plus">
+</p>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="gkd-app/src/main/res/mipmap/gkd_white.png">
+    <img src="gkd-app/src/main/res/mipmap/gkd_black.png" width="180" alt="GKD-Plus">
+  </picture>
 </p>
 
 <p align="center">

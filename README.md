@@ -3,7 +3,18 @@
 [English](README_EN.md) | **简体中文**
 
 <p align="center">
+  模型赞助商：<a href="https://xbcl.link/register?aff=N5TPL7ETW65W">xbcl</a> —— 2 折 Opus / GPT 文本·生图模型
+</p>
+
+<p align="center">
   <img src="docs/images/icon.png" width="96" alt="GKD-Plus">
+</p>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="gkd-app/src/main/res/mipmap/gkd_white.png">
+    <img src="gkd-app/src/main/res/mipmap/gkd_black.png" width="180" alt="GKD-Plus">
+  </picture>
 </p>
 
 <p align="center">
