@@ -3,7 +3,7 @@
 **English** | [简体中文](README.md)
 
 <p align="center">
-  Model sponsor: <a href="https://xbcl.link/register?aff=N5TPL7ETW65W">xbcl</a> — Opus / GPT text &amp; image models at 20% of list price
+  <a href="https://xbcl.link/register?aff=N5TPL7ETW65W"><img src="docs/images/sponsor-xbcl-en.png" width="440" alt="Model sponsor: XBCL AI API — Opus / GPT text &amp; image models, 80% off"></a>
 </p>
 
 <p align="center">

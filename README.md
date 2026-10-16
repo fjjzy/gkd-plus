@@ -3,7 +3,7 @@
 [English](README_EN.md) | **简体中文**
 
 <p align="center">
-  模型赞助商：<a href="https://xbcl.link/register?aff=N5TPL7ETW65W">xbcl</a> —— 2 折 Opus / GPT 文本·生图模型
+  <a href="https://xbcl.link/register?aff=N5TPL7ETW65W"><img src="docs/images/sponsor-xbcl.png" width="440" alt="模型赞助商 XBCL AI API —— 2 折 Opus / GPT 文本·生图模型"></a>
 </p>
 
 <p align="center">
