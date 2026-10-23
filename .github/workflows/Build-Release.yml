@@ -63,9 +63,14 @@ jobs:
             gkd-*.apk
             outputs-*.zip
 
-      # 同步版本号到 Gitee 仓库的 version.json, 作为 App 在 GitHub 不可达时的更新兜底
-      # 只覆盖 versionCode/versionName, quarkUrl/desc 保留 Gitee 上手动维护的值
+      # 同步版本号与描述到 Gitee 仓库的 version.json, 作为 App 在 GitHub 不可达时的更新兜底
+      # 覆盖 versionCode/versionName, 并从 CHANGELOG.md 生成 desc("# 更新内容" 下的 "- " 条目
+      # 转成 "N. " 编号分点) 一并写入; quarkUrl 保留 Gitee 上手动维护的值
+      # npm 步骤复用这份 version.json, 所以 npm 的 gkdPlus.desc 会自动同步
       # 需要仓库 secret: GITEE_TOKEN (Gitee 私人令牌, 具备 projects 读写权限)
+      #
+      # desc 现在由 CHANGELOG.md 自动生成, 发版前只需改 CHANGELOG.md 即可,
+      # 不要再手动去 Gitee 改 desc(2026-10-23 发 v1.12.2-plus.2 就因手动维护漏更新)
       - name: update gitee version.json
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
@@ -75,6 +80,13 @@ jobs:
           version_code=$(jq -r '.elements[0].versionCode' "${metadata}")
           version_name=$(jq -r '.elements[0].versionName' "${metadata}")
 
+          # 从 CHANGELOG.md 生成 desc: "# 更新内容" 下的 "- " 条目 -> "N. " 编号分点
+          desc=$(awk '/^## /{exit} /^- /{gsub(/^- /,""); n++; print n". "$0}' CHANGELOG.md)
+          if [ -z "${desc}" ]; then
+            echo "CHANGELOG.md has no '- ' entries under '# 更新内容'" >&2
+            exit 1
+          fi
+
           repo=fjjzy/gkd-plus
           branch=master
           path=version.json
@@ -83,8 +95,8 @@ jobs:
           current=$(curl -sSf "${api}?access_token=${GITEE_TOKEN}&ref=${branch}")
           sha=$(jq -r '.sha' <<<"${current}")
           json=$(jq -r '.content' <<<"${current}" | base64 -d)
-          updated=$(jq --argjson code "${version_code}" --arg name "${version_name}" \
-            '.versionCode = $code | .versionName = $name' <<<"${json}")
+          updated=$(jq --argjson code "${version_code}" --arg name "${version_name}" --arg desc "${desc}" \
+            '.versionCode = $code | .versionName = $name | .desc = $desc' <<<"${json}")
           content=$(base64 -w0 <<<"${updated}")
 
           status=$(curl -sS -o /tmp/gitee-response.json -w '%{http_code}' -X PUT "${api}" \
