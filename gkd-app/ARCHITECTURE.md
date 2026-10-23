@@ -24,7 +24,7 @@ service / receiver ─► data、domain、platform
 - `data/`：持久化、网络、文件及跨数据源一致性边界。单表访问直接依赖 Room DAO；只有需要协调状态、并发、文件或多个数据源时才引入 Repository、Manager 或 Service。
 - `platform/`：Android 平台能力的统一入口，例如 Service 启停控制；不得依赖页面 ViewModel。
 - `ui/component`、`ui/share`、`ui/style`：跨功能复用的无业务写入 UI 基础设施。
-- `service/`、`a11y/`、`notif/`、`priv/`：Android 已注册组件及其运行时实现。为保持系统组件类名兼容暂不改包名，但通过 `platform/` 与 UI 解耦。
+- `service/`、`a11y/`、`notif/`、`priv/`：Android 已注册组件及其运行时实现。为保持系统组件类名兼容暂不改包名，但通过 `platform/` 与 UI 解耦。开机自愈由 `BootRestoreReceiver` 在 `BOOT_COMPLETED` 时写回无障碍条目，不依赖特权服务在线。
 
 ## 状态与写入边界
 

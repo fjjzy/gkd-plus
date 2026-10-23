@@ -687,7 +687,7 @@
     <string name="search_no_results">暂无搜索结果</string>
     <string name="search_no_results_filter_hint">暂无搜索结果，或修改筛选</string>
     <string name="search_open">打开搜索</string>
-    <string name="secure_settings_permission_description">应用可自行控制开关无障碍</string>
+    <string name="secure_settings_permission_description">连接一次特权服务（Shizuku 即可）后自动授予；重启后 GKD 会自动恢复无障碍</string>
     <string name="secure_settings_permission_grant">授予「写入安全设置权限」</string>
     <string name="secure_settings_permission_granted">已授予写入安全设置权限</string>
     <string name="secure_settings_permission_required">请先授予「写入安全设置权限」</string>

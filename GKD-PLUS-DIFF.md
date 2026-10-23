@@ -122,6 +122,22 @@
 - `gkd-app/src/main/kotlin/li/gkd/app/ui/AppConfigVm.kt` — 新增 `addSimpleRule`，生成规则组并追加到本地订阅
 - `gkd-app/src/main/res/values/strings.xml` — `rule_add_simple` / `rule_add_full` / `simple_rule_*` 文案
 
+### 12. 无障碍开机自愈
+
+重启后自动写回无障碍服务，避免 ColorOS 等系统移除第三方无障碍条目。
+
+- `BootRestoreReceiver` 监听 `BOOT_COMPLETED` / `QUICKBOOT_POWERON`，在 `enableAutomator && useA11y` 时写回 `enabled_accessibility_services`，带重试与「移除 → 加回」修复
+- `PrivilegeContext.ensureWriteSecureSettings()`：Root 走 `grantRuntimePermission`；Shizuku / ADB 绕过 priv-kit 的 `isPermissionRestricted()` 守卫，由特权服务执行一次 `pm grant`。权限持久化后，开机不再依赖特权服务在线
+- 工作模式页文案说明「连接一次特权服务（Shizuku 即可）」
+
+**新增文件**
+- `gkd-app/src/main/kotlin/li/gkd/app/service/BootRestoreReceiver.kt`
+
+**改动文件**
+- `gkd-app/src/main/AndroidManifest.xml` — `RECEIVE_BOOT_COMPLETED` 权限与 receiver
+- `gkd-app/src/main/kotlin/li/gkd/app/priv/PrivilegeContext.kt` — `ensureWriteSecureSettings`
+- `gkd-app/src/main/res/values/strings.xml` — 工作模式说明文案
+
 ---
 
 ## 二、品牌与构建配置

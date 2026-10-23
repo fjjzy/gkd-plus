@@ -65,6 +65,13 @@ If you would rather not write selectors, open the `App rules` page, tap the expa
 - Optional "Close with back key": the action becomes the back key instead of clicking the matched node
 - Duplicate names get a `-2` / `-3` suffix, so existing rules are never overwritten
 
+### Accessibility Restore after Reboot
+
+- Some systems (especially ColorOS) remove third-party accessibility entries after a reboot; GKD-Plus writes its entry back on boot
+- Connect the privileged service once (Shizuku is enough); the app runs `pm grant` automatically to obtain `WRITE_SECURE_SETTINGS`. The grant persists, so later boots do not need Shizuku or Root to be online
+- After adding the GKD tile to Quick Settings, pulling down the shade checks and restarts accessibility if it was turned off during normal use ("seamless keep-alive"; this does not cover restoring after a reboot)
+- Requirements: the system must allow GKD to auto-start, and the automation switch must be on with the work mode set to "Accessibility"
+
 ## Install
 
 Download the latest `gkd-*.apk` from [Releases](https://github.com/fjjzy/gkd-plus/releases/latest) and install it.
@@ -91,6 +98,12 @@ Rules are not limited to closing ads. You can describe any condition you want, f
 - **Skip flows**: automatically skip annoying startup flows
 
 ## FAQ
+
+### ColorOS: accessibility lost after reboot / repeated Security Center prompts
+
+ColorOS removes third-party accessibility entries on reboot or when clearing background apps. Its Security Center also performs package-based risk control and, when triggered, turns accessibility off and shows a prompt. Apps outside the system allowlist are more likely to be affected.
+
+After connecting the privileged service once (Shizuku or Root), the app obtains write-secure-settings access automatically and restores accessibility on boot. If the Security Center still prompts, switch to "Automation" mode, which does not register an accessibility service.
 
 If rule generation fails, open `Settings - About - Export logs` and send the exported logs to `3329221986@qq.com`, or file an issue on [GitHub](https://github.com/fjjzy/gkd-plus/issues) (please attach the logs, otherwise it is hard to diagnose).
 

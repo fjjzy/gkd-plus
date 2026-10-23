@@ -16,9 +16,11 @@ import li.gkd.app.app
 import li.gkd.app.data.UserInfo
 import li.gkd.app.permission.PermissionStates
 import li.gkd.app.util.AndroidTarget
+import li.gkd.app.util.LogUtils
 import priv.kit.core.Privilege
 import priv.kit.core.PrivilegeServerInfo
 import priv.kit.core.PrivilegeUserServiceConnection
+import priv.kit.core.command.PrivilegeCommand
 
 class PrivilegeContext private constructor(
     val serverInfo: PrivilegeServerInfo,
@@ -35,10 +37,11 @@ class PrivilegeContext private constructor(
     private val userService = IUserService.Stub.asInterface(userServiceConnection.binder)
     private var taskStackListenerRegistered = false
 
-    private fun initialize() {
+    private suspend fun initialize() {
         activityManager.value.registerTaskStackListener(CompatTaskStackListener)
         taskStackListenerRegistered = true
         grantSelf()
+        ensureWriteSecureSettings()
     }
 
     suspend fun destroy() {
@@ -169,6 +172,49 @@ class PrivilegeContext private constructor(
             packageName = META.appId,
             permissionName = name,
         )
+    }
+
+    /**
+     * priv-kit 在「非 root 且服务端缺少 GRANT_RUNTIME_PERMISSIONS」时会把
+     * grantRuntimePermission 整体拒掉（grantSelf 会直接 return）。Shizuku/ADB
+     * 启动的服务端通常正好落在这个分支，所以这里改成让特权服务执行一条
+     * `pm grant`，把 WRITE_SECURE_SETTINGS 补上。
+     *
+     * 该权限一旦授予会持久化，后续开机自愈不再依赖特权服务在线。
+     */
+    private suspend fun ensureWriteSecureSettings() {
+        val permission = Manifest.permission.WRITE_SECURE_SETTINGS
+        if (app.checkGrantedPermission(permission)) return
+        if (serverInfo.uid == 0) {
+            // Root 分支正常会被 grantSelf() 覆盖，这里只做兜底重试。
+            try {
+                Privilege.grantRuntimePermission(
+                    packageName = META.appId,
+                    permissionName = permission,
+                )
+            } catch (e: Throwable) {
+                LogUtils.d("ensureWriteSecureSettings root grant failed", e)
+            }
+            return
+        }
+        try {
+            val process = Privilege.startCommand(
+                PrivilegeCommand(
+                    listOf("pm", "grant", META.appId, permission),
+                )
+            )
+            try {
+                val result = process.awaitResult()
+                LogUtils.d(
+                    "ensureWriteSecureSettings",
+                    "exitCode=${result.exitCode} stderr=${result.stderr.decodeToString().trim()}",
+                )
+            } finally {
+                process.close()
+            }
+        } catch (e: Throwable) {
+            LogUtils.d("ensureWriteSecureSettings shell grant failed", e)
+        }
     }
 
     private fun allowAllSelfPermission() {
