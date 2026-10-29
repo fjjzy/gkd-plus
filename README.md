@@ -24,7 +24,7 @@
   <a href="/LICENSE"><img alt="license" src="https://img.shields.io/github/license/fjjzy/gkd-plus?label=license"></a>
 </p>
 
-GKD-Plus 是基于 [GKD](https://github.com/gkd-kit/gkd) 的增强分支，在原版基础上加入 AI 智能规则生成等能力。
+GKD-Plus 是基于 [GKD](https://github.com/gkd-kit/gkd) 的增强分支，在原版基础上加入 AI 智能规则生成、李跳跳简易规则能力。
 
 GKD 是一个基于[高级选择器](https://gkd.li/guide/selector)、[订阅规则](https://gkd.li/guide/subscription) 与[快照审查](https://github.com/gkd-kit/inspect)的自定义屏幕点击 Android 应用：通过自定义规则，在指定界面满足指定条件（如屏幕上存在特定文字）时，点击特定节点或位置，或执行其他操作。
 
