@@ -14,9 +14,9 @@ class ButtonTileService : BaseTileService() {
     override fun onTileClick() {
         if (storeFlow.value.aiTileDirectPicker) {
             // 直达「我来选择」：跳过菜单，不再需要先点磁贴再点菜单项
-            ButtonService.start(pickComponents = true)
+            ButtonService.start(ButtonStartMode.PickComponents, fromTile = true)
         } else {
-            ButtonService.start(expandMenu = true)
+            ButtonService.start(ButtonStartMode.Menu, fromTile = true)
         }
         collapseQuickSettingsPanel()
     }

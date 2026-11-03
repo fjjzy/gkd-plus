@@ -55,10 +55,13 @@ class AiSnapshotPickerVm : BaseViewModel() {
     fun startConversation(snapshotId: Long, appId: String, nodes: List<NodeInfo>) {
         scope.launchUi {
             AiRuleLauncher.ensureConversation(snapshotId, appId)
-            AiConversationStore.setSelectedComponents(
-                snapshotId,
-                nodes.map { it.toSelectedComponent() },
-            )
+            // 空选择表示「不指定组件」，不能用空列表覆盖会话里已有的选择
+            if (nodes.isNotEmpty()) {
+                AiConversationStore.setSelectedComponents(
+                    snapshotId,
+                    nodes.map { it.toSelectedComponent() },
+                )
+            }
         }
     }
 

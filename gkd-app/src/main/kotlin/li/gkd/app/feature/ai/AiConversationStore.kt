@@ -14,7 +14,17 @@ data class AiMessage(
     val time: Long,
     /** 思考模型的思考过程；正文之前流式到达，默认折叠展示 */
     val reasoning: String = "",
-)
+    /**
+     * 消息类型；交互只认这个标记，不去比对展示文案。
+     * 老数据没有该字段，反序列化为空串，按普通消息处理。
+     */
+    val kind: String = KIND_TEXT,
+) {
+    companion object {
+        const val KIND_TEXT = ""
+        const val KIND_ACCEPTED_RULE = "accepted_rule"
+    }
+}
 
 /**
  * 会话中选中的目标组件（精简后的节点信息，可序列化持久化）

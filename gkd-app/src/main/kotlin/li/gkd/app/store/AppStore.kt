@@ -80,6 +80,23 @@ object AppStore {
     fun updateSettings(transform: (SettingsStore) -> SettingsStore) =
         repository.updateSettings(transform)
 
+    /**
+     * 标记「长按关闭」提示已展示，返回本次是否为首次。
+     * 读取与写入放在同一次 update 里，避免两次读取之间被别处改动。
+     */
+    fun markSnapshotHintShown(): Boolean {
+        var first = false
+        repository.updateSettings { settings ->
+            if (settings.snapshotButtonHintShown) {
+                settings
+            } else {
+                first = true
+                settings.copy(snapshotButtonHintShown = true)
+            }
+        }
+        return first
+    }
+
     fun incrementActionCount() = repository.incrementActionCount()
 
     fun updateBlockMatchAppList(transform: (Set<String>) -> Set<String>) =

@@ -94,6 +94,69 @@ class AiApiUrlTest {
     }
 
     @Test
+    fun differentVersionSegmentsAreKept() {
+        // /v3/v1 是两个有意义的路径段，不能像 /v1/v1 那样合并
+        assertEquals(
+            "https://gw.example.com/v3/v1",
+            AiRuleGenerator.fixApiUrl("https://gw.example.com/v3/v1", "openai"),
+        )
+    }
+
+    @Test
+    fun queryStringIsKeptAfterAppendingEndpoint() {
+        assertEquals(
+            "https://gw.example.com/v1?key=abc",
+            AiRuleGenerator.fixApiUrl("https://gw.example.com/v1?key=abc", "openai"),
+        )
+        assertEquals(
+            "https://gw.example.com/v1/chat/completions?key=abc",
+            AiRuleGenerator.resolveEndpoint("https://gw.example.com/v1?key=abc", "openai"),
+        )
+    }
+
+    @Test
+    fun ipv6LoopbackKeepsBracketsAndUsesHttp() {
+        assertEquals(
+            "http://[::1]:8080/v1",
+            AiRuleGenerator.fixApiUrl("[::1]:8080", "openai"),
+        )
+    }
+
+    @Test
+    fun azureDeploymentPathIsNotRewritten() {
+        val endpoint =
+            "https://r.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2024-10-21"
+        assertEquals(endpoint, AiRuleGenerator.fixApiUrl(endpoint, "openai"))
+        assertEquals(endpoint, AiRuleGenerator.resolveEndpoint(endpoint, "openai"))
+        assertNull(AiRuleGenerator.validateAiConfig(config(endpoint)))
+    }
+
+    @Test
+    fun azureDeploymentWithoutVersionSegmentGetsChatCompletions() {
+        assertEquals(
+            "https://r.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2024-10-21",
+            AiRuleGenerator.resolveEndpoint(
+                "https://r.openai.azure.com/openai/deployments/gpt-4o?api-version=2024-10-21",
+                "openai",
+            ),
+        )
+    }
+
+    @Test
+    fun azureConfigWithoutApiVersionOrDeploymentIsReported() {
+        assertNotNull(
+            AiRuleGenerator.validateAiConfig(
+                config("https://r.openai.azure.com/openai/deployments/gpt-4o/chat/completions"),
+            ),
+        )
+        assertNotNull(
+            AiRuleGenerator.validateAiConfig(
+                config("https://r.openai.azure.com/chat/completions?api-version=2024-10-21"),
+            ),
+        )
+    }
+
+    @Test
     fun localServiceDefaultsToPlainHttp() {
         // Ollama 这类本机服务通常没有 TLS，默认 https 会直接连不上
         assertEquals(

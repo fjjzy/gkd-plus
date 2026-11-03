@@ -97,12 +97,12 @@ private fun JsonObject.mergeParams(extra: Map<String, JsonElement>): JsonObject 
 
 private fun HttpRequestBuilder.applyAiAuth(config: AiConfig) {
     when {
-        config.protocol == "anthropic" -> {
+        config.protocol == PROTOCOL_ANTHROPIC -> {
             header("x-api-key", config.apiKey)
             header("anthropic-version", "2023-06-01")
         }
         // Azure OpenAI 用 api-key 头，不认 Bearer
-        config.apiUrl.contains(".openai.azure.com", ignoreCase = true) ->
+        isAzureApiHost(apiHostOf(config.apiUrl)) ->
             header("api-key", config.apiKey)
         else -> header("Authorization", "Bearer ${config.apiKey}")
     }
@@ -151,8 +151,10 @@ private val apiProviderPresets = listOf(
 /** 路径里的版本段：`/v1`、`/api/v3`、`/api/paas/v4`、`/v1beta`、`/compatible-mode/v1` */
 private val apiVersionSegment = Regex("""(?:^|/)v\d+(?:beta|alpha)?(?=/|$)""", RegexOption.IGNORE_CASE)
 
-/** 重复的版本段：`/v1/v1`、`/v4/v4` */
-private val repeatedVersionSegment = Regex("""(?:/v\d+(?:beta|alpha)?){2,}""", RegexOption.IGNORE_CASE)
+/** 完整的聊天端点后缀；出现这些后缀时不再拼接 */
+private val endpointSuffixes = listOf("/chat/completions", "/messages", "/completions", "/responses")
+
+private const val PROTOCOL_ANTHROPIC = "anthropic"
 
 private val apiUrlScheme = Regex("""^https?:/*""", RegexOption.IGNORE_CASE)
 
@@ -164,7 +166,8 @@ private fun cleanApiUrlInput(raw: String): String = raw
     .replace('：', ':')
     .replace('／', '/')
     .replace('．', '.')
-    .trim('"', '\'', '`', '“', '”', '‘', '’', '<', '>', ',', '，', '、', '(', ')', '（', '）', '[', ']')
+    // 不能 trim 方括号：IPv6 的 [::1]:8080 会被破坏
+    .trim('"', '\'', '`', '“', '”', '‘', '’', '<', '>', ',', '，', '、', '(', ')', '（', '）')
     .trimEnd('/', '.', '。', ',', '，', ';', '；', '、')
 
 private fun apiHostOf(url: String): String {
@@ -190,24 +193,45 @@ private fun isLocalApiHost(host: String): Boolean {
         (parts[0] == 172 && parts[1] in 16..31)
 }
 
+private fun findProviderPreset(host: String): ApiProviderPreset? = apiProviderPresets
+    .filter { host == it.host || host.endsWith(".${it.host}") }
+    .maxByOrNull { it.host.length }
+
+/** Azure OpenAI 走 `/openai/deployments/<部署名>/...`，路径不能按通用规则补 `/v1` */
+private fun isAzureApiHost(host: String): Boolean = host.endsWith("openai.azure.com")
+
 private fun providerDefaultPath(host: String, protocol: String): String? {
-    val preset = apiProviderPresets
-        .filter { host == it.host || host.endsWith(".${it.host}") }
-        .maxByOrNull { it.host.length } ?: return null
-    return if (protocol == "anthropic") preset.anthropicPath else preset.openAiPath
+    val preset = findProviderPreset(host) ?: return null
+    return if (protocol == PROTOCOL_ANTHROPIC) preset.anthropicPath else preset.openAiPath
 }
 
-private fun isFullApiEndpoint(path: String): Boolean =
-    path.endsWith("/chat/completions") || path.endsWith("/messages") ||
-        path.endsWith("/completions") || path.endsWith("/responses")
+private fun isFullApiEndpoint(path: String): Boolean = endpointSuffixes.any { path.endsWith(it) }
+
+/** 路径与查询串分开，拼接端点时要把 `?api-version=` 这类参数保留在后面 */
+private fun String.splitQuery(): Pair<String, String> {
+    val index = indexOfFirst { it == '?' || it == '#' }
+    return if (index < 0) this to "" else substring(0, index) to substring(index)
+}
+
+/** 只合并完全相同的相邻版本段（`/v1/v1`），`/v3/v1` 这种有意义的不同版本保持原样 */
+private fun collapseRepeatedVersionSegments(path: String): String {
+    if (path.isEmpty()) return path
+    val result = ArrayList<String>()
+    path.split('/').forEach { segment ->
+        val previous = result.lastOrNull()
+        val duplicated = previous != null &&
+            previous.equals(segment, ignoreCase = true) &&
+            apiVersionSegment.matches(segment)
+        if (!duplicated) result += segment
+    }
+    return result.joinToString("/")
+}
 
 /** 选了 anthropic 协议，但地址其实是服务方的 OpenAI 路径（或该服务方根本没有 Anthropic 端点） */
 private fun anthropicProtocolHint(url: String, protocol: String): String? {
-    if (protocol != "anthropic") return null
+    if (protocol != PROTOCOL_ANTHROPIC) return null
     val host = apiHostOf(url)
-    val preset = apiProviderPresets
-        .filter { host == it.host || host.endsWith(".${it.host}") }
-        .maxByOrNull { it.host.length } ?: return null
+    val preset = findProviderPreset(host) ?: return null
     val anthropicPath = preset.anthropicPath
         ?: return "${preset.host} 没有 Anthropic 兼容端点，请把协议切换为 openai"
     if (anthropicPath == preset.openAiPath) return null
@@ -264,18 +288,20 @@ object AiRuleGenerator {
         } else {
             "/" + pathOnly.split('/').filter { it.isNotEmpty() }.joinToString("/")
         }
-        val deduped = repeatedVersionSegment.replace(collapsed) { match ->
-            "/" + match.value.substringAfter('/').substringBefore('/')
-        }
+        val deduped = collapseRepeatedVersionSegments(collapsed)
+        val azure = isAzureApiHost(host)
 
         val defaultPath = providerDefaultPath(host, protocol)
         val path = when {
+            // Azure 的 deployment 路径原样保留，补 /v1 反而会 404
+            azure -> deduped
             deduped.isEmpty() -> defaultPath ?: "/v1"
             defaultPath != null && !apiVersionSegment.containsMatchIn(deduped) &&
                 (deduped == defaultPath || defaultPath.startsWith("$deduped/")) -> defaultPath
             else -> deduped
         }
         val finalPath = when {
+            azure -> path
             isFullApiEndpoint(path) -> path
             apiVersionSegment.containsMatchIn(path) -> path
             else -> "$path/v1"
@@ -287,27 +313,19 @@ object AiRuleGenerator {
     fun resolveEndpoint(apiUrl: String, protocol: String): String {
         val baseUrl = fixApiUrl(apiUrl, protocol)
         if (baseUrl.isEmpty()) return baseUrl
-        val suffix = if (protocol == "anthropic") "/messages" else "/chat/completions"
-        // 用户可能已经把完整端点粘进来了，不能再拼一次；带查询参数的完整端点也不能动
-        if (baseUrl.endsWith(suffix) || baseUrl.contains('?')) return baseUrl
-        if (baseUrl.endsWith("/chat/completions") || baseUrl.endsWith("/messages") ||
-            baseUrl.endsWith("/completions") || baseUrl.endsWith("/responses")) return baseUrl
-        return baseUrl + suffix
+        val (path, query) = baseUrl.splitQuery()
+        val suffix = if (protocol == PROTOCOL_ANTHROPIC) "/messages" else "/chat/completions"
+        // 已是完整端点就原样返回；查询串（如 Azure 的 api-version）要保留在拼接结果之后
+        if (isFullApiEndpoint(path) || path.endsWith(suffix)) return baseUrl
+        return "$path$suffix$query"
     }
 
     /** 模型列表接口；用户粘完整端点时先退回到它的 base */
     fun resolveModelsEndpoint(apiUrl: String, protocol: String): String {
-        val baseUrl = fixApiUrl(apiUrl, protocol).substringBefore('?')
-        val modelsBase = baseUrl
-            .removeSuffix("/chat/completions")
-            .removeSuffix("/messages")
-            .removeSuffix("/completions")
-            .removeSuffix("/responses")
+        val baseUrl = fixApiUrl(apiUrl, protocol).splitQuery().first
+        val modelsBase = endpointSuffixes.fold(baseUrl) { acc, suffix -> acc.removeSuffix(suffix) }
         return "$modelsBase/models"
     }
-
-    private fun buildApiEndpoint(config: AiConfig): String =
-        resolveEndpoint(config.apiUrl, config.protocol)
 
     private fun createHttpClient(): HttpClient {
         return HttpClient(OkHttp) {
@@ -358,7 +376,7 @@ object AiRuleGenerator {
         // 那种情况温度不该被顶成 1
         val thinkingOn = thinkingParams["thinking"]?.jsonObject?.get("type").strOrNull() == "enabled"
         return when (config.protocol) {
-            "anthropic" -> {
+            PROTOCOL_ANTHROPIC -> {
                 val request = AnthropicRequest(
                     model = config.model,
                     system = system,
@@ -405,20 +423,27 @@ object AiRuleGenerator {
         val url = fixApiUrl(config.apiUrl, config.protocol)
         val endpoint = resolveEndpoint(config.apiUrl, config.protocol)
         val protocolHint = anthropicProtocolHint(url, config.protocol)
+        val azure = isAzureApiHost(apiHostOf(url))
         val key = config.apiKey
         return when {
             raw.isEmpty() -> "请填写 API 地址"
             url.isEmpty() || !url.startsWith("http") -> "API 地址无效，请检查域名和端口"
             url.startsWith("http://") && !isLocalApiHost(apiHostOf(url)) ->
                 "API 地址建议使用 https（公网明文 http 可能被服务方拒绝）"
+            // Azure 的路径是 /openai/deployments/<部署名>/chat/completions?api-version=...
+            azure && (!endpoint.contains("/openai/deployments/") ||
+                !endpoint.contains("/chat/completions")) ->
+                "Azure OpenAI 地址需为 https://<资源名>.openai.azure.com/openai/deployments/<部署名>/chat/completions"
+            azure && !endpoint.contains("api-version=") ->
+                "Azure OpenAI 地址需带 ?api-version=2024-xx-xx"
             endpoint.contains("/responses") ->
                 "暂不支持 /responses 接口：OpenAI 协议请填 /chat/completions 地址"
             apiHostOf(url).endsWith("bigmodel.cn") && url.contains("/api/paas/v3") ->
                 "智谱 OpenAI 兼容接口是 /api/paas/v4，/v3 是旧版非兼容接口"
-            config.protocol != "anthropic" && url.contains("/anthropic", ignoreCase = true) ->
+            config.protocol != PROTOCOL_ANTHROPIC && url.contains("/anthropic", ignoreCase = true) ->
                 "该地址是 Anthropic 兼容端点，请把协议切换为 anthropic"
             protocolHint != null -> protocolHint
-            config.protocol == "anthropic" && endpoint.endsWith("/chat/completions") ->
+            config.protocol == PROTOCOL_ANTHROPIC && endpoint.endsWith("/chat/completions") ->
                 "该地址是 OpenAI 兼容端点，请把协议切换为 openai"
             key != key.trim() -> "API Key 前后有空白字符，已自动去除"
             key.contains(' ') -> "API Key 中含空格，绝大多数服务方 Key 不含空格"
@@ -488,7 +513,7 @@ object AiRuleGenerator {
     suspend fun testConnection(config: AiConfig): Result<String> = runCatching {
         val httpClient = createHttpClient()
         try {
-            val endpoint = buildApiEndpoint(config)
+            val endpoint = resolveEndpoint(config.apiUrl, config.protocol)
             val response = httpClient.post(endpoint) {
                 applyAiAuth(config)
                 contentType(ContentType.Application.Json)
@@ -654,6 +679,7 @@ object AiRuleGenerator {
                             role = "assistant",
                             content = AiConversation.ACCEPTED_RULE_MESSAGE,
                             time = System.currentTimeMillis(),
+                            kind = AiMessage.KIND_ACCEPTED_RULE,
                         ),
                         status = AiConversation.STATUS_ACCEPTED,
                     )
@@ -801,6 +827,7 @@ object AiRuleGenerator {
                 role = "assistant",
                 content = AiConversation.ACCEPTED_RULE_MESSAGE,
                 time = System.currentTimeMillis(),
+                kind = AiMessage.KIND_ACCEPTED_RULE,
             ),
             status = AiConversation.STATUS_SUCCESS,
         )
@@ -994,7 +1021,7 @@ object AiRuleGenerator {
         val config = request.config
         val httpClient = createHttpClient()
         try {
-            val endpoint = buildApiEndpoint(config)
+            val endpoint = resolveEndpoint(config.apiUrl, config.protocol)
             val requestBody =
                 buildRequestBody(request, maxTokensOverride, stream = true)
             val content = StringBuilder()
@@ -1017,7 +1044,7 @@ object AiRuleGenerator {
                     val element = runCatching { json.parseToJsonElement(data).jsonObject }
                         .getOrNull() ?: continue
                     when (config.protocol) {
-                        "anthropic" -> {
+                        PROTOCOL_ANTHROPIC -> {
                             when (element["type"].strOrNull()) {
                                 "content_block_delta" -> {
                                     val deltaObj = element["delta"]?.jsonObject
@@ -1080,7 +1107,7 @@ object AiRuleGenerator {
         maxTokensOverride: Int? = null,
     ): String {
         val config = request.config
-        val endpoint = buildApiEndpoint(config)
+        val endpoint = resolveEndpoint(config.apiUrl, config.protocol)
         val requestBody = buildRequestBody(request, maxTokensOverride)
         LogUtils.d("AI Request endpoint: $endpoint")
         val httpClient = createHttpClient()
@@ -1098,7 +1125,7 @@ object AiRuleGenerator {
             val jsonElement = json.parseToJsonElement(body)
 
             return when (config.protocol) {
-                "anthropic" -> {
+                PROTOCOL_ANTHROPIC -> {
                     val contentArr = jsonElement.jsonObject["content"]
                         ?: throw Exception("Anthropic 响应中没有 content 字段")
                     // 思考模型会先返回 thinking 块，正文在 text 块里；只看第一块会误判成「没有内容」

@@ -16,7 +16,7 @@ object ServiceController {
 
     fun setSnapshotButtonEnabled(enabled: Boolean) = setEnabled(
         enabled = enabled,
-        start = ButtonService::start,
+        start = { ButtonService.start() },
         stop = ButtonService::stop,
     )
 

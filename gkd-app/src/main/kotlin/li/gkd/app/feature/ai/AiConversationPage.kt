@@ -90,6 +90,10 @@ fun AiConversationPage(route: AiConversationRoute) {
     val shareScope = rememberCoroutineScope()
     val activity = LocalActivity.current as? MainActivity
     val listState = rememberLazyListState()
+    // 顶栏图标与「已加入本地规则」消息共用同一个跳转入口
+    val openLocalRules: (String) -> Unit = { appId ->
+        mainVm.navigatePage(SubsAppGroupListRoute(LOCAL_SUBS_ID, appId))
+    }
     // 进程被杀后会话会停在 generating，进来先尝试恢复
     LaunchedEffect(route.snapshotId) { vm.recoverInterruptedGeneration(route.snapshotId) }
     // 选了多个组件时提示可以用序号指代；提醒两次后不再打扰
@@ -138,11 +142,7 @@ fun AiConversationPage(route: AiConversationRoute) {
                         Row(
                             modifier = Modifier
                                 .clip(MaterialTheme.shapes.small)
-                                .clickable(onClick = throttle {
-                                    mainVm.navigatePage(
-                                        SubsAppGroupListRoute(LOCAL_SUBS_ID, appId),
-                                    )
-                                })
+                                .clickable(onClick = throttle { openLocalRules(appId) })
                                 .padding(horizontal = 4.dp, vertical = 2.dp),
                             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -222,12 +222,9 @@ fun AiConversationPage(route: AiConversationRoute) {
                 }
             } else {
                 itemsIndexed(current.messages) { index, message ->
-                    val appId = current.appId
-                    // 「已加入本地规则。」这条提示可点击，直接跳到该 app 的本地规则列表
-                    val onJumpToRule = if (message.content == AiConversation.ACCEPTED_RULE_MESSAGE) {
-                        throttle {
-                            mainVm.navigatePage(SubsAppGroupListRoute(LOCAL_SUBS_ID, appId))
-                        }
+                    // 只认消息类型标记，不比对展示文案；用户消息即使文案相同也不会变成入口
+                    val onJumpToRule = if (message.kind == AiMessage.KIND_ACCEPTED_RULE) {
+                        throttle { openLocalRules(current.appId) }
                     } else {
                         null
                     }
@@ -511,17 +508,25 @@ private fun MessageItem(message: AiMessage, isStreaming: Boolean, onClick: (() -
                             )
                         }
                     }
+                    val contentColor = if (isUser) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    }
+                    val contentText: @Composable () -> Unit = {
+                        Text(
+                            text = message.content,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = contentColor,
+                        )
+                    }
                     if (onClick != null) {
                         // 可点击跳转的消息：末尾补一个右箭头，暗示「点进去」
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            Text(
-                                text = message.content,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
+                            contentText()
                             GkIcon(
                                 imageVector = GkIcons.KeyboardArrowRight,
                                 contentDescription = null,
@@ -530,15 +535,7 @@ private fun MessageItem(message: AiMessage, isStreaming: Boolean, onClick: (() -
                             )
                         }
                     } else {
-                        Text(
-                            text = message.content,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (isUser) {
-                                MaterialTheme.colorScheme.onPrimaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
-                        )
+                        contentText()
                     }
                 }
             }

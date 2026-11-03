@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,7 +31,6 @@ import li.gkd.app.notif.NotificationCatalog
 import li.gkd.app.permission.PermissionStates
 import li.gkd.app.snapshot.SnapshotCapture
 import li.gkd.app.store.AppStore
-import li.gkd.app.store.AppStore.storeFlow
 import li.gkd.app.ui.share.launchUi
 import li.gkd.app.util.AiRuleGenerator
 import li.gkd.app.util.IntentUtils
@@ -46,6 +46,15 @@ class ButtonService : OverlayWindowService(
     private var lastClickTime = 0L
     private val menuVisible = MutableStateFlow(false)
 
+    /** 最近一次启动的 startId：停止时只停这一次，避免连带取消后来的启动 */
+    private var lastStartId = 0
+
+    /** 由磁贴拉起时，完成任一操作后自动收起；从设置里打开则保持常驻 */
+    private var autoHideAfterAction = false
+
+    /** 磁贴连点会重复下发 onStartCommand，用 Job 挡住重复的直达流程 */
+    private var pickJob: Job? = null
+
     override fun onClickView() {
         if (isOverlayContentHidden) return
         // 单击：展开/收起菜单
@@ -55,25 +64,32 @@ class ButtonService : OverlayWindowService(
     override fun onLongClickView() = stopSelf()
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        lastStartId = startId
+        autoHideAfterAction = intent?.getBooleanExtra(EXTRA_FROM_TILE, false) == true
         // 控制栏磁贴点击：启动后直接展开菜单，由用户自己选「仅快照 / 快速识别 / 我来选择」
         if (intent?.getBooleanExtra(EXTRA_EXPAND_MENU, false) == true) {
             menuVisible.value = true
         }
         // 开启「快照磁贴直达选组件」后：跳过菜单，直接进入「我来选择」
-        val pickComponents = intent?.getBooleanExtra(EXTRA_PICK_COMPONENTS, false) == true
-        if (pickComponents) {
-            lifecycleScope.launchUi { pickAndCapture(fromTile = true) }
+        if (intent?.getBooleanExtra(EXTRA_PICK_COMPONENTS, false) == true) {
+            if (pickJob?.isActive != true) {
+                pickJob = lifecycleScope.launchUi { pickAndCapture(fromTile = true) }
+            }
         } else {
-            // 首次展开菜单时提示长按可关闭；直达模式按钮随即收起，提示没有意义
+            // 首次显示按钮时提示长按可关闭；直达模式按钮随即收起，提示没有意义
             showCloseHintIfNeeded()
         }
         return super.onStartCommand(intent, flags, startId)
     }
 
     private fun showCloseHintIfNeeded() {
-        if (storeFlow.value.snapshotButtonHintShown) return
-        AppStore.updateSettings { it.copy(snapshotButtonHintShown = true) }
+        if (!AppStore.markSnapshotHintShown()) return
         toast("长按快照按钮可以关闭")
+    }
+
+    /** 磁贴拉起的按钮用完即收；从设置打开的常驻按钮不动 */
+    private fun hideIfOneShot(startId: Int = lastStartId) {
+        if (autoHideAfterAction) stopSelf(startId)
     }
 
     /** 仅快照：只保存快照，不登记 AI 会话、不发起识别 */
@@ -84,8 +100,8 @@ class ButtonService : OverlayWindowService(
                 SnapshotCapture.capture()
             }
         } finally {
-            // 触发任一操作后都收起按钮，避免按钮一直挂在屏幕上
-            stopSelf()
+            // 磁贴拉起的按钮用完即收；设置里打开的常驻按钮保持显示
+            hideIfOneShot()
         }
     }
 
@@ -97,7 +113,7 @@ class ButtonService : OverlayWindowService(
                 SnapshotCapture.capture(triggerAiRule = true, recordAiSession = true)
             }
         } finally {
-            stopSelf()
+            hideIfOneShot()
         }
     }
 
@@ -107,9 +123,11 @@ class ButtonService : OverlayWindowService(
         try {
             withAllOverlaysHidden {
                 // 从磁贴直达时控制栏可能还没收起，根节点可能仍是 SystemUI 或短暂为 null
-                awaitAppRootReady()
-                // 等控制栏收起动画走完再截图/拉起界面，避免截到过渡帧或拉起被系统拦截
-                if (fromTile) delay(150)
+                if (fromTile) {
+                    awaitAppRootReady()
+                    // 等收起动画走完再截图/拉起界面，避免截到过渡帧或拉起被系统拦截
+                    delay(QUICK_SETTINGS_SETTLE_MS)
+                }
                 val startAt = System.currentTimeMillis()
                 // keepStatusBar：选择器需坐标对齐；triggerAiRule=false：选完组件再决定生成
                 // recordAiSession：即使最后点了「算了」，这张快照也要能在工作台里找到
@@ -137,7 +155,8 @@ class ButtonService : OverlayWindowService(
                 )
             }
         } finally {
-            stopSelf()
+            // 停止最近一次启动：连点磁贴时后续的 startId 也一起收掉，避免按钮残留
+            hideIfOneShot()
         }
     }
 
@@ -145,17 +164,15 @@ class ButtonService : OverlayWindowService(
      * 等到控制栏收起、下层应用的根节点就绪再截图。
      * 从磁贴直达时控制栏可能还没收起，甚至返回瞬间根节点会短暂为 null；
      * 这两类情况都不能直接截图，否则会截到控制栏或直接抛「根节点缺失」。
-     * 正常从悬浮菜单进入时控制栏早已收起，这里只会多一次判断。
      */
-    private suspend fun awaitAppRootReady(): Boolean {
+    private suspend fun awaitAppRootReady() {
         val deadline = System.currentTimeMillis() + QUICK_SETTINGS_WAIT_MS
         while (System.currentTimeMillis() < deadline) {
             val appId = A11yRuntime.getRoot()?.packageName?.toString()
-            if (appId != null && appId != systemUiAppId) return true
+            if (appId != null && appId != systemUiAppId) return
             delay(50)
         }
         LogUtils.d("等待应用根节点超时，按当前状态继续截图", loc = "ButtonService")
-        return false
     }
 
     @Composable
@@ -231,17 +248,27 @@ class ButtonService : OverlayWindowService(
         private const val EXTRA_EXPAND_MENU = "expand_menu"
         private const val EXTRA_PICK_COMPONENTS = "pick_components"
 
+        /** 是否由控制栏磁贴拉起：只有磁贴拉起的按钮会在操作后自动收起 */
+        private const val EXTRA_FROM_TILE = "from_tile"
+
         /** 等控制栏收起的上限；迟迟没收到就按当前状态截图，避免卡住流程 */
         private const val QUICK_SETTINGS_WAIT_MS = 1500L
+
+        /** 根节点就绪后，再等收起动画结束的时长 */
+        private const val QUICK_SETTINGS_SETTLE_MS = 150L
 
         val isRunning: StateFlow<Boolean>
             field = MutableStateFlow(false)
 
-        fun start(expandMenu: Boolean = false, pickComponents: Boolean = false) {
+        fun start(
+            mode: ButtonStartMode = ButtonStartMode.Menu,
+            fromTile: Boolean = false,
+        ) {
             if (!PermissionStates.drawOverlays.checkOrToast()) return
             IntentUtils.startForegroundServiceByClass(ButtonService::class) {
-                putExtra(EXTRA_EXPAND_MENU, expandMenu)
-                putExtra(EXTRA_PICK_COMPONENTS, pickComponents)
+                putExtra(EXTRA_EXPAND_MENU, mode == ButtonStartMode.Menu)
+                putExtra(EXTRA_PICK_COMPONENTS, mode == ButtonStartMode.PickComponents)
+                putExtra(EXTRA_FROM_TILE, fromTile)
             }
         }
 
@@ -249,3 +276,6 @@ class ButtonService : OverlayWindowService(
 
     }
 }
+
+/** 拉起快照按钮的意图：展开菜单，或直接进入「我来选择」 */
+enum class ButtonStartMode { Menu, PickComponents }
