@@ -92,7 +92,7 @@ data class AiConversation(
         const val STATUS_ACCEPTED = "accepted"
         const val STATUS_FAILED = "failed"
 
-        // 规则加入本地订阅后追加的提示文案；会话页据此识别「可点击跳转规则详情」的消息
+        // 规则加入本地订阅后的提示文案（是否可点击由 AiMessage.kind 决定，不看文案）
         const val ACCEPTED_RULE_MESSAGE = "已加入本地规则。"
     }
 }

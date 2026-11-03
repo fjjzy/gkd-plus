@@ -157,6 +157,65 @@ class AiApiUrlTest {
     }
 
     @Test
+    fun queryOnHostWithoutPathIsNotTreatedAsAuthority() {
+        // 没有路径时 `?` 之后不能并进域名，否则地址会被拼成 ...?key=abc/v1
+        assertEquals(
+            "https://gw.example.com/v1?key=abc",
+            AiRuleGenerator.fixApiUrl("gw.example.com?key=abc", "openai"),
+        )
+        assertEquals(
+            "https://gw.example.com/v1/chat/completions?key=abc",
+            AiRuleGenerator.resolveEndpoint("gw.example.com?key=abc", "openai"),
+        )
+    }
+
+    @Test
+    fun queryOnBareAzureHostIsStillValidated() {
+        // 域名里混入查询串会让 Azure 判断失效，这里要求仍能识别出地址不完整
+        assertNotNull(
+            AiRuleGenerator.validateAiConfig(
+                config("https://r.openai.azure.com?api-version=2024-10-21"),
+            ),
+        )
+    }
+
+    @Test
+    fun azureModelsEndpointUsesOpenAiModelsPath() {
+        assertEquals(
+            "https://r.openai.azure.com/openai/models?api-version=2024-10-21",
+            AiRuleGenerator.resolveModelsEndpoint(
+                "https://r.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2024-10-21",
+                "openai",
+            ),
+        )
+    }
+
+    @Test
+    fun gatewayQueryIsKeptForModelList() {
+        assertEquals(
+            "https://gw.example.com/v1/models?key=abc",
+            AiRuleGenerator.resolveModelsEndpoint("https://gw.example.com/v1?key=abc", "openai"),
+        )
+    }
+
+    @Test
+    fun anthropicMismatchIsDetectedEvenWithQuery() {
+        assertNotNull(
+            AiRuleGenerator.validateAiConfig(
+                config("https://api.openai.com/v1/chat/completions?key=abc", "anthropic"),
+            ),
+        )
+    }
+
+    @Test
+    fun azureChinaDeploymentPathIsNotRewritten() {
+        assertEquals(
+            "https://r.openai.azure.cn/openai/deployments/gpt-4o",
+            AiRuleGenerator.fixApiUrl("https://r.openai.azure.cn/openai/deployments/gpt-4o", "openai"),
+        )
+    }
+
+    @Test
     fun localServiceDefaultsToPlainHttp() {
         // Ollama 这类本机服务通常没有 TLS，默认 https 会直接连不上
         assertEquals(

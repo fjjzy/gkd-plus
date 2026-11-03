@@ -73,7 +73,7 @@ class ButtonService : OverlayWindowService(
         // 开启「快照磁贴直达选组件」后：跳过菜单，直接进入「我来选择」
         if (intent?.getBooleanExtra(EXTRA_PICK_COMPONENTS, false) == true) {
             if (pickJob?.isActive != true) {
-                pickJob = lifecycleScope.launchUi { pickAndCapture(fromTile = true) }
+                pickJob = lifecycleScope.launchUi { pickAndCapture() }
             }
         } else {
             // 首次显示按钮时提示长按可关闭；直达模式按钮随即收起，提示没有意义
@@ -117,8 +117,10 @@ class ButtonService : OverlayWindowService(
         }
     }
 
-    private suspend fun pickAndCapture(fromTile: Boolean = false) {
+    private suspend fun pickAndCapture() {
         menuVisible.value = false
+        // 服务是否由磁贴拉起：磁贴路径才需要等控制栏收起、并在一动作后自动收起按钮
+        val fromTile = autoHideAfterAction
         val startedAt = System.currentTimeMillis()
         try {
             withAllOverlaysHidden {
@@ -261,7 +263,7 @@ class ButtonService : OverlayWindowService(
             field = MutableStateFlow(false)
 
         fun start(
-            mode: ButtonStartMode = ButtonStartMode.Menu,
+            mode: ButtonStartMode = ButtonStartMode.ButtonOnly,
             fromTile: Boolean = false,
         ) {
             if (!PermissionStates.drawOverlays.checkOrToast()) return
@@ -277,5 +279,5 @@ class ButtonService : OverlayWindowService(
     }
 }
 
-/** 拉起快照按钮的意图：展开菜单，或直接进入「我来选择」 */
-enum class ButtonStartMode { Menu, PickComponents }
+/** 拉起快照按钮的意图：只显示按钮、展开菜单，或直接进入「我来选择」 */
+enum class ButtonStartMode { ButtonOnly, Menu, PickComponents }

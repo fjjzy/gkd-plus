@@ -445,6 +445,7 @@ private const val TAIL_SCROLL_DISTANCE = 100_000f
 @Composable
 private fun MessageItem(message: AiMessage, isStreaming: Boolean, onClick: (() -> Unit)? = null) {
     val isUser = message.role == "user"
+    val clickAction = onClick
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
@@ -461,8 +462,8 @@ private fun MessageItem(message: AiMessage, isStreaming: Boolean, onClick: (() -
                     shape = MaterialTheme.shapes.medium,
                 )
                 .let {
-                    if (onClick != null) {
-                        it.clip(MaterialTheme.shapes.medium).clickable(onClick = onClick)
+                    if (clickAction != null) {
+                        it.clip(MaterialTheme.shapes.medium).clickable(onClick = clickAction)
                     } else {
                         it
                     }
@@ -513,6 +514,7 @@ private fun MessageItem(message: AiMessage, isStreaming: Boolean, onClick: (() -
                     } else {
                         MaterialTheme.colorScheme.onSurface
                     }
+                    val clickable = clickAction != null
                     val contentText: @Composable () -> Unit = {
                         Text(
                             text = message.content,
@@ -520,7 +522,7 @@ private fun MessageItem(message: AiMessage, isStreaming: Boolean, onClick: (() -
                             color = contentColor,
                         )
                     }
-                    if (onClick != null) {
+                    if (clickable) {
                         // 可点击跳转的消息：末尾补一个右箭头，暗示「点进去」
                         Row(
                             verticalAlignment = Alignment.CenterVertically,

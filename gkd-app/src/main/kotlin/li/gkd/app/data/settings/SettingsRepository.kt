@@ -134,6 +134,21 @@ private class PersistedValue<T>(
         enqueue(value)
     }
 
+    /**
+     * 仅当 [predicate] 成立时更新，返回本次是否真的写入。
+     * 判断与写入在同一把锁内完成，调用方不用先读状态再写。
+     */
+    @Synchronized
+    fun updateIf(predicate: (T) -> Boolean, transform: (T) -> T): Boolean {
+        val current = mutableState.value
+        if (!predicate(current)) return false
+        val value = transform(current)
+        rollbackState?.let { it.value = transform(it.value) }
+        mutableState.value = value
+        enqueue(value)
+        return true
+    }
+
     suspend fun awaitPersistence() {
         val targetVersion = synchronized(this) { currentVersion }
         val result = writeResult.first { it.version >= targetVersion }
@@ -227,6 +242,12 @@ class SettingsRepository(
      */
     fun updateSettings(transform: (SettingsStore) -> SettingsStore) =
         settingsValue.update(transform)
+
+    /** 标记「长按关闭」提示已展示；返回本次是否为首次（判断与写入同一把锁内完成） */
+    fun markSnapshotHintShown(): Boolean = settingsValue.updateIf(
+        predicate = { !it.snapshotButtonHintShown },
+        transform = { it.copy(snapshotButtonHintShown = true) },
+    )
 
     fun incrementActionCount() = actionCountValue.update { it + 1 }
 

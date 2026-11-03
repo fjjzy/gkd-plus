@@ -172,7 +172,8 @@ private fun cleanApiUrlInput(raw: String): String = raw
 
 private fun apiHostOf(url: String): String {
     val rest = url.substringAfter("://", url).trimStart('/')
-    val authority = rest.substringBefore('/')
+    // authority 只到路径/查询/锚点为止，`host?key=abc` 这种写法也要能取到域名
+    val authority = rest.substringBefore('/').substringBefore('?').substringBefore('#')
     return if (authority.startsWith("[")) {
         authority.substringBefore("]") + "]"
     } else {
@@ -198,7 +199,8 @@ private fun findProviderPreset(host: String): ApiProviderPreset? = apiProviderPr
     .maxByOrNull { it.host.length }
 
 /** Azure OpenAI 走 `/openai/deployments/<部署名>/...`，路径不能按通用规则补 `/v1` */
-private fun isAzureApiHost(host: String): Boolean = host.endsWith("openai.azure.com")
+private fun isAzureApiHost(host: String): Boolean =
+    host.endsWith("openai.azure.com") || host.endsWith("openai.azure.cn")
 
 private fun providerDefaultPath(host: String, protocol: String): String? {
     val preset = findProviderPreset(host) ?: return null
@@ -275,14 +277,17 @@ object AiRuleGenerator {
             cleaned.trimStart('/')
         }
         if (rest.isEmpty()) return ""
-        val authority = rest.substringBefore('/')
+        // 先把查询串/锚点从地址里切出来：`host?key=abc` 这种没有路径的写法
+        // 否则整串会被当成 authority，域名解析和 Azure 判断都会失效
+        val queryIndex = rest.indexOfFirst { it == '?' || it == '#' }
+        val address = if (queryIndex < 0) rest else rest.substring(0, queryIndex)
+        val tail = if (queryIndex < 0) "" else rest.substring(queryIndex)
+        val authority = address.substringBefore('/')
         if (authority.isEmpty()) return ""
         val host = apiHostOf("https://$authority")
         val scheme = explicitScheme ?: if (isLocalApiHost(host)) "http" else "https"
 
-        val rawPath = rest.substringAfter('/', "")
-        val pathOnly = rawPath.substringBefore('?').substringBefore('#')
-        val tail = rawPath.substring(pathOnly.length)
+        val pathOnly = address.substringAfter('/', "")
         val collapsed = if (pathOnly.isEmpty()) {
             ""
         } else {
@@ -314,17 +319,24 @@ object AiRuleGenerator {
         val baseUrl = fixApiUrl(apiUrl, protocol)
         if (baseUrl.isEmpty()) return baseUrl
         val (path, query) = baseUrl.splitQuery()
-        val suffix = if (protocol == PROTOCOL_ANTHROPIC) "/messages" else "/chat/completions"
         // 已是完整端点就原样返回；查询串（如 Azure 的 api-version）要保留在拼接结果之后
-        if (isFullApiEndpoint(path) || path.endsWith(suffix)) return baseUrl
+        if (isFullApiEndpoint(path)) return baseUrl
+        val suffix = if (protocol == PROTOCOL_ANTHROPIC) "/messages" else "/chat/completions"
         return "$path$suffix$query"
     }
 
     /** 模型列表接口；用户粘完整端点时先退回到它的 base */
     fun resolveModelsEndpoint(apiUrl: String, protocol: String): String {
-        val baseUrl = fixApiUrl(apiUrl, protocol).splitQuery().first
-        val modelsBase = endpointSuffixes.fold(baseUrl) { acc, suffix -> acc.removeSuffix(suffix) }
-        return "$modelsBase/models"
+        val (path, query) = fixApiUrl(apiUrl, protocol).splitQuery()
+        val host = apiHostOf(path)
+        // Azure 没有 OpenAI 兼容的 /models，走 /openai/models
+        if (isAzureApiHost(host)) {
+            val scheme = path.substringBefore("://", "https")
+            val authority = path.substringAfter("://", path).substringBefore('/')
+            return "$scheme://$authority/openai/models$query"
+        }
+        val modelsBase = endpointSuffixes.fold(path) { acc, suffix -> acc.removeSuffix(suffix) }
+        return "$modelsBase/models$query"
     }
 
     private fun createHttpClient(): HttpClient {
@@ -423,6 +435,7 @@ object AiRuleGenerator {
         val url = fixApiUrl(config.apiUrl, config.protocol)
         val endpoint = resolveEndpoint(config.apiUrl, config.protocol)
         val protocolHint = anthropicProtocolHint(url, config.protocol)
+        val endpointPath = endpoint.splitQuery().first
         val azure = isAzureApiHost(apiHostOf(url))
         val key = config.apiKey
         return when {
@@ -431,8 +444,8 @@ object AiRuleGenerator {
             url.startsWith("http://") && !isLocalApiHost(apiHostOf(url)) ->
                 "API 地址建议使用 https（公网明文 http 可能被服务方拒绝）"
             // Azure 的路径是 /openai/deployments/<部署名>/chat/completions?api-version=...
-            azure && (!endpoint.contains("/openai/deployments/") ||
-                !endpoint.contains("/chat/completions")) ->
+            azure && (!endpointPath.contains("/openai/deployments/") ||
+                !endpointPath.endsWith("/chat/completions")) ->
                 "Azure OpenAI 地址需为 https://<资源名>.openai.azure.com/openai/deployments/<部署名>/chat/completions"
             azure && !endpoint.contains("api-version=") ->
                 "Azure OpenAI 地址需带 ?api-version=2024-xx-xx"
@@ -443,7 +456,7 @@ object AiRuleGenerator {
             config.protocol != PROTOCOL_ANTHROPIC && url.contains("/anthropic", ignoreCase = true) ->
                 "该地址是 Anthropic 兼容端点，请把协议切换为 anthropic"
             protocolHint != null -> protocolHint
-            config.protocol == PROTOCOL_ANTHROPIC && endpoint.endsWith("/chat/completions") ->
+            config.protocol == PROTOCOL_ANTHROPIC && endpointPath.endsWith("/chat/completions") ->
                 "该地址是 OpenAI 兼容端点，请把协议切换为 openai"
             key != key.trim() -> "API Key 前后有空白字符，已自动去除"
             key.contains(' ') -> "API Key 中含空格，绝大多数服务方 Key 不含空格"

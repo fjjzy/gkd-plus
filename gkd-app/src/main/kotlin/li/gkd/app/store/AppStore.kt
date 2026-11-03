@@ -82,20 +82,9 @@ object AppStore {
 
     /**
      * 标记「长按关闭」提示已展示，返回本次是否为首次。
-     * 读取与写入放在同一次 update 里，避免两次读取之间被别处改动。
+     * 判断与写入都在 Store 内原子完成，避免两次读取之间被别处改动。
      */
-    fun markSnapshotHintShown(): Boolean {
-        var first = false
-        repository.updateSettings { settings ->
-            if (settings.snapshotButtonHintShown) {
-                settings
-            } else {
-                first = true
-                settings.copy(snapshotButtonHintShown = true)
-            }
-        }
-        return first
-    }
+    fun markSnapshotHintShown(): Boolean = repository.markSnapshotHintShown()
 
     fun incrementActionCount() = repository.incrementActionCount()
 
