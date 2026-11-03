@@ -96,11 +96,14 @@ private fun JsonObject.mergeParams(extra: Map<String, JsonElement>): JsonObject 
     if (extra.isEmpty()) this else JsonObject(this + extra)
 
 private fun HttpRequestBuilder.applyAiAuth(config: AiConfig) {
-    when (config.protocol) {
-        "anthropic" -> {
+    when {
+        config.protocol == "anthropic" -> {
             header("x-api-key", config.apiKey)
             header("anthropic-version", "2023-06-01")
         }
+        // Azure OpenAI 用 api-key 头，不认 Bearer
+        config.apiUrl.contains(".openai.azure.com", ignoreCase = true) ->
+            header("api-key", config.apiKey)
         else -> header("Authorization", "Bearer ${config.apiKey}")
     }
 }
@@ -111,6 +114,108 @@ private data class AiCallRequest(
     val system: String?,
     val messages: List<ChatMessage>,
 )
+
+/**
+ * 各家兼容接口的默认路径。用户只填域名（或少了版本段）时据此补全，
+ * 避免一律补 `/v1` —— 智谱是 `/api/paas/v4`、火山是 `/api/v3`、千问是 `/compatible-mode/v1`。
+ */
+private class ApiProviderPreset(
+    val host: String,
+    val openAiPath: String,
+    val anthropicPath: String? = null,
+)
+
+private val apiProviderPresets = listOf(
+    ApiProviderPreset("open.bigmodel.cn", "/api/paas/v4", "/api/anthropic"),
+    ApiProviderPreset("bigmodel.cn", "/api/paas/v4", "/api/anthropic"),
+    ApiProviderPreset("api.z.ai", "/api/paas/v4", "/api/anthropic"),
+    ApiProviderPreset("dashscope.aliyuncs.com", "/compatible-mode/v1"),
+    ApiProviderPreset("dashscope-intl.aliyuncs.com", "/compatible-mode/v1"),
+    ApiProviderPreset("ark.cn-beijing.volces.com", "/api/v3"),
+    ApiProviderPreset("generativelanguage.googleapis.com", "/v1beta/openai"),
+    ApiProviderPreset("api.deepseek.com", "/v1"),
+    ApiProviderPreset("api.moonshot.cn", "/v1"),
+    ApiProviderPreset("api.moonshot.ai", "/v1"),
+    ApiProviderPreset("api.siliconflow.cn", "/v1"),
+    ApiProviderPreset("api.siliconflow.com", "/v1"),
+    ApiProviderPreset("openrouter.ai", "/api/v1"),
+    ApiProviderPreset("api.groq.com", "/openai/v1"),
+    ApiProviderPreset("api.mistral.ai", "/v1"),
+    ApiProviderPreset("api.x.ai", "/v1"),
+    ApiProviderPreset("api.minimaxi.com", "/v1"),
+    ApiProviderPreset("api.minimax.chat", "/v1"),
+    ApiProviderPreset("api.anthropic.com", "/v1", "/v1"),
+    ApiProviderPreset("api.openai.com", "/v1"),
+)
+
+/** 路径里的版本段：`/v1`、`/api/v3`、`/api/paas/v4`、`/v1beta`、`/compatible-mode/v1` */
+private val apiVersionSegment = Regex("""(?:^|/)v\d+(?:beta|alpha)?(?=/|$)""", RegexOption.IGNORE_CASE)
+
+/** 重复的版本段：`/v1/v1`、`/v4/v4` */
+private val repeatedVersionSegment = Regex("""(?:/v\d+(?:beta|alpha)?){2,}""", RegexOption.IGNORE_CASE)
+
+private val apiUrlScheme = Regex("""^https?:/*""", RegexOption.IGNORE_CASE)
+
+/** 粘贴地址时常见的全角符号与包裹字符 */
+private fun cleanApiUrlInput(raw: String): String = raw
+    .replace("\uFEFF", "")
+    .replace("\u200B", "")
+    .filterNot { it.isWhitespace() }
+    .replace('：', ':')
+    .replace('／', '/')
+    .replace('．', '.')
+    .trim('"', '\'', '`', '“', '”', '‘', '’', '<', '>', ',', '，', '、', '(', ')', '（', '）', '[', ']')
+    .trimEnd('/', '.', '。', ',', '，', ';', '；', '、')
+
+private fun apiHostOf(url: String): String {
+    val rest = url.substringAfter("://", url).trimStart('/')
+    val authority = rest.substringBefore('/')
+    return if (authority.startsWith("[")) {
+        authority.substringBefore("]") + "]"
+    } else {
+        authority.substringBefore(':').lowercase()
+    }
+}
+
+/** 本机 / 局域网的地址默认用 http，其余默认 https */
+private fun isLocalApiHost(host: String): Boolean {
+    val name = host.trim('[', ']').lowercase()
+    if (name == "localhost" || name == "::1" || name == "0.0.0.0") return true
+    if (name.endsWith(".local") || name.endsWith(".lan")) return true
+    val octets = name.split('.')
+    if (octets.size != 4) return false
+    val parts = octets.map { it.toIntOrNull() ?: return false }
+    return parts[0] == 10 || parts[0] == 127 ||
+        (parts[0] == 192 && parts[1] == 168) ||
+        (parts[0] == 172 && parts[1] in 16..31)
+}
+
+private fun providerDefaultPath(host: String, protocol: String): String? {
+    val preset = apiProviderPresets
+        .filter { host == it.host || host.endsWith(".${it.host}") }
+        .maxByOrNull { it.host.length } ?: return null
+    return if (protocol == "anthropic") preset.anthropicPath else preset.openAiPath
+}
+
+private fun isFullApiEndpoint(path: String): Boolean =
+    path.endsWith("/chat/completions") || path.endsWith("/messages") ||
+        path.endsWith("/completions") || path.endsWith("/responses")
+
+/** 选了 anthropic 协议，但地址其实是服务方的 OpenAI 路径（或该服务方根本没有 Anthropic 端点） */
+private fun anthropicProtocolHint(url: String, protocol: String): String? {
+    if (protocol != "anthropic") return null
+    val host = apiHostOf(url)
+    val preset = apiProviderPresets
+        .filter { host == it.host || host.endsWith(".${it.host}") }
+        .maxByOrNull { it.host.length } ?: return null
+    val anthropicPath = preset.anthropicPath
+        ?: return "${preset.host} 没有 Anthropic 兼容端点，请把协议切换为 openai"
+    if (anthropicPath == preset.openAiPath) return null
+    if (url.substringAfter("://").contains(preset.openAiPath)) {
+        return "该地址是 OpenAI 兼容路径，Anthropic 协议应填 https://${preset.host}$anthropicPath"
+    }
+    return null
+}
 
 object AiRuleGenerator {
 
@@ -126,29 +231,83 @@ object AiRuleGenerator {
         text
     }
 
+    /**
+     * 把用户输入整理成可用的 API 地址：补 scheme、去多余斜杠、去重复版本段，
+     * 并按服务方补默认路径（智谱 `/api/paas/v4`、火山 `/api/v3` 等）。
+     * 已经粘了完整端点（`/chat/completions`、`/messages`）时只做清洗，不再改动路径。
+     */
     fun fixApiUrl(url: String, protocol: String): String {
-        var fixed = url.trim().trimEnd('/')
-        // If URL already contains a full path, don't modify
-        if (fixed.contains("/chat/completions") || fixed.contains("/messages")) {
-            return fixed
+        val cleaned = cleanApiUrlInput(url)
+        if (cleaned.isEmpty()) return ""
+        val hasScheme = apiUrlScheme.containsMatchIn(cleaned)
+        val explicitScheme = when {
+            cleaned.startsWith("https:", ignoreCase = true) -> "https"
+            cleaned.startsWith("http:", ignoreCase = true) -> "http"
+            else -> null
         }
-        // If URL already ends with /v1, keep it
-        if (fixed.endsWith("/v1")) {
-            return fixed
+        val rest = if (hasScheme) {
+            apiUrlScheme.replaceFirst(cleaned, "").trimStart('/')
+        } else {
+            cleaned.trimStart('/')
         }
-        // If URL already contains /v1 somewhere, don't add it again
-        if (fixed.contains("/v1/")) {
-            return fixed
+        if (rest.isEmpty()) return ""
+        val authority = rest.substringBefore('/')
+        if (authority.isEmpty()) return ""
+        val host = apiHostOf("https://$authority")
+        val scheme = explicitScheme ?: if (isLocalApiHost(host)) "http" else "https"
+
+        val rawPath = rest.substringAfter('/', "")
+        val pathOnly = rawPath.substringBefore('?').substringBefore('#')
+        val tail = rawPath.substring(pathOnly.length)
+        val collapsed = if (pathOnly.isEmpty()) {
+            ""
+        } else {
+            "/" + pathOnly.split('/').filter { it.isNotEmpty() }.joinToString("/")
         }
-        return "$fixed/v1"
+        val deduped = repeatedVersionSegment.replace(collapsed) { match ->
+            "/" + match.value.substringAfter('/').substringBefore('/')
+        }
+
+        val defaultPath = providerDefaultPath(host, protocol)
+        val path = when {
+            deduped.isEmpty() -> defaultPath ?: "/v1"
+            defaultPath != null && !apiVersionSegment.containsMatchIn(deduped) &&
+                (deduped == defaultPath || defaultPath.startsWith("$deduped/")) -> defaultPath
+            else -> deduped
+        }
+        val finalPath = when {
+            isFullApiEndpoint(path) -> path
+            apiVersionSegment.containsMatchIn(path) -> path
+            else -> "$path/v1"
+        }
+        return "$scheme://$authority$finalPath$tail"
     }
 
-    private fun buildApiEndpoint(config: AiConfig): String {
-        val baseUrl = fixApiUrl(config.apiUrl, config.protocol)
-        // 用户可能已经把完整端点粘进来了（此时 fixApiUrl 会原样返回），不能再拼一次
-        val suffix = if (config.protocol == "anthropic") "/messages" else "/chat/completions"
-        return if (baseUrl.endsWith(suffix)) baseUrl else baseUrl + suffix
+    /** 实际会请求的地址；设置页用它预览，避免用户以为补的是 `/v1` */
+    fun resolveEndpoint(apiUrl: String, protocol: String): String {
+        val baseUrl = fixApiUrl(apiUrl, protocol)
+        if (baseUrl.isEmpty()) return baseUrl
+        val suffix = if (protocol == "anthropic") "/messages" else "/chat/completions"
+        // 用户可能已经把完整端点粘进来了，不能再拼一次；带查询参数的完整端点也不能动
+        if (baseUrl.endsWith(suffix) || baseUrl.contains('?')) return baseUrl
+        if (baseUrl.endsWith("/chat/completions") || baseUrl.endsWith("/messages") ||
+            baseUrl.endsWith("/completions") || baseUrl.endsWith("/responses")) return baseUrl
+        return baseUrl + suffix
     }
+
+    /** 模型列表接口；用户粘完整端点时先退回到它的 base */
+    fun resolveModelsEndpoint(apiUrl: String, protocol: String): String {
+        val baseUrl = fixApiUrl(apiUrl, protocol).substringBefore('?')
+        val modelsBase = baseUrl
+            .removeSuffix("/chat/completions")
+            .removeSuffix("/messages")
+            .removeSuffix("/completions")
+            .removeSuffix("/responses")
+        return "$modelsBase/models"
+    }
+
+    private fun buildApiEndpoint(config: AiConfig): String =
+        resolveEndpoint(config.apiUrl, config.protocol)
 
     private fun createHttpClient(): HttpClient {
         return HttpClient(OkHttp) {
@@ -239,16 +398,28 @@ object AiRuleGenerator {
 
     /**
      * 常见配置错误的本地预检，返回错误提示；null 表示通过。
+     * 地址的格式问题（缺 http、多余斜杠、版本段重复）已经由 [fixApiUrl] 自动修正，这里只提示改不了的部分。
      */
     fun validateAiConfig(config: AiConfig): String? {
-        val url = config.apiUrl.trim()
+        val raw = config.apiUrl.trim()
+        val url = fixApiUrl(config.apiUrl, config.protocol)
+        val endpoint = resolveEndpoint(config.apiUrl, config.protocol)
+        val protocolHint = anthropicProtocolHint(url, config.protocol)
         val key = config.apiKey
         return when {
-            !url.startsWith("http") -> "API 地址应以 http:// 或 https:// 开头"
-            url.startsWith("http://") -> "API 地址建议使用 https"
-            url.contains("//") && !url.startsWith("http://") && !url.startsWith("https://") ->
-                "API 地址中有多余斜杠，请检查"
-            url.contains("/v1/v1") -> "API 地址中 /v1 重复（地址本身可能已自带 /v1）"
+            raw.isEmpty() -> "请填写 API 地址"
+            url.isEmpty() || !url.startsWith("http") -> "API 地址无效，请检查域名和端口"
+            url.startsWith("http://") && !isLocalApiHost(apiHostOf(url)) ->
+                "API 地址建议使用 https（公网明文 http 可能被服务方拒绝）"
+            endpoint.contains("/responses") ->
+                "暂不支持 /responses 接口：OpenAI 协议请填 /chat/completions 地址"
+            apiHostOf(url).endsWith("bigmodel.cn") && url.contains("/api/paas/v3") ->
+                "智谱 OpenAI 兼容接口是 /api/paas/v4，/v3 是旧版非兼容接口"
+            config.protocol != "anthropic" && url.contains("/anthropic", ignoreCase = true) ->
+                "该地址是 Anthropic 兼容端点，请把协议切换为 anthropic"
+            protocolHint != null -> protocolHint
+            config.protocol == "anthropic" && endpoint.endsWith("/chat/completions") ->
+                "该地址是 OpenAI 兼容端点，请把协议切换为 openai"
             key != key.trim() -> "API Key 前后有空白字符，已自动去除"
             key.contains(' ') -> "API Key 中含空格，绝大多数服务方 Key 不含空格"
             config.model.isBlank() -> "模型名称为空"
@@ -343,8 +514,7 @@ object AiRuleGenerator {
     }
 
     suspend fun fetchModelList(config: AiConfig): Result<List<String>> = runCatching {
-        val baseUrl = fixApiUrl(config.apiUrl, config.protocol)
-        val modelsEndpoint = "$baseUrl/models"
+        val modelsEndpoint = resolveModelsEndpoint(config.apiUrl, config.protocol)
         val httpClient = createHttpClient()
         try {
             val response = httpClient.get(modelsEndpoint) {
@@ -482,7 +652,7 @@ object AiRuleGenerator {
                         snapshotId = snapshotId,
                         message = AiMessage(
                             role = "assistant",
-                            content = "已加入本地规则。",
+                            content = AiConversation.ACCEPTED_RULE_MESSAGE,
                             time = System.currentTimeMillis(),
                         ),
                         status = AiConversation.STATUS_ACCEPTED,
@@ -629,7 +799,7 @@ object AiRuleGenerator {
             snapshotId = snapshotId,
             message = AiMessage(
                 role = "assistant",
-                content = "已加入本地规则。",
+                content = AiConversation.ACCEPTED_RULE_MESSAGE,
                 time = System.currentTimeMillis(),
             ),
             status = AiConversation.STATUS_SUCCESS,

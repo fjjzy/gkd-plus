@@ -109,12 +109,17 @@ fun AiSettingsDialog(
         AiThinkingUtils.describe(currentConfig())
     }
 
+    // 用户填的地址会被补全（补 scheme、补版本段），把最终请求地址显示出来避免误解
+    val endpointPreview = remember(apiUrlValue, protocolValue) {
+        if (apiUrlValue.isBlank()) "" else AiRuleGenerator.resolveEndpoint(apiUrlValue, protocolValue)
+    }
+
     fun saveConfig(config: AiConfig) {
         AppStore.updateSettings {
             it.copy(
                 aiConfig = it.aiConfig.copy(
                     protocol = config.protocol,
-                    apiUrl = config.apiUrl.trim().trimEnd('/'),
+                    apiUrl = AiRuleGenerator.fixApiUrl(config.apiUrl, config.protocol),
                     apiKey = config.apiKey.trim(),
                     model = config.model.trim(),
                     temperature = config.temperature,
@@ -194,12 +199,19 @@ fun AiSettingsDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                if (endpointPreview.isNotEmpty()) {
+                    Text(
+                        text = "实际请求：$endpointPreview",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Spacer(modifier = Modifier.height(8.dp))
 
                 OutlinedTextField(
                     label = { Text("API Key") },
                     value = apiKeyValue,
-                    placeholder = { Text(text = "sk-...（以 sk- 开头）") },
+                    placeholder = { Text(text = "sk-... 或服务方自己的 Key 格式") },
                     onValueChange = { apiKeyValue = it },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),

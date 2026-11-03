@@ -135,6 +135,12 @@ fun AiWorkbenchPage() {
                         checked = store.aiEnable,
                         onCheckedChange = vm::setAiEnable,
                     )
+                    GkTextSwitch(
+                        title = "快照磁贴直达选组件",
+                        subtitle = "点击快照磁贴后跳过菜单，直接进入「我来选择」",
+                        checked = store.aiTileDirectPicker,
+                        onCheckedChange = vm::setAiTileDirectPicker,
+                    )
                     GkSettingItem(
                         title = "AI 规则设置",
                         subtitle = "配置大模型协议、API 地址、模型等参数",

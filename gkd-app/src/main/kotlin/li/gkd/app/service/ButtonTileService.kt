@@ -3,6 +3,7 @@ package li.gkd.app.service
 import kotlinx.coroutines.Dispatchers
 import li.gkd.app.a11y.A11yRuntime
 import li.gkd.app.appScope
+import li.gkd.app.store.AppStore.storeFlow
 import li.gkd.app.ui.share.launchUi
 import li.gkd.app.util.systemUiAppId
 
@@ -11,7 +12,12 @@ class ButtonTileService : BaseTileService() {
 
     // 未开启则启动并展开菜单，已开启则只展开菜单；关闭悬浮按钮走按钮自身长按 / 通知「停止」/ 高级页开关
     override fun onTileClick() {
-        ButtonService.start(expandMenu = true)
+        if (storeFlow.value.aiTileDirectPicker) {
+            // 直达「我来选择」：跳过菜单，不再需要先点磁贴再点菜单项
+            ButtonService.start(pickComponents = true)
+        } else {
+            ButtonService.start(expandMenu = true)
+        }
         collapseQuickSettingsPanel()
     }
 }

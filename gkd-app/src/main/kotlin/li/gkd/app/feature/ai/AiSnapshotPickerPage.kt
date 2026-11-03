@@ -216,7 +216,7 @@ fun AiSnapshotPickerPage(route: AiSnapshotPickerRoute) {
                     }
                     Spacer(modifier = Modifier.width(4.dp))
                     TextButton(
-                        enabled = selectedNodes.isNotEmpty(),
+                        // 不选组件也可以对话：让模型基于整份快照给建议，再在会话里补充要求
                         onClick = throttle {
                             val appId = snapshot?.appId ?: return@throttle
                             vm.startConversation(route.snapshotId, appId, selectedNodes)

@@ -10,15 +10,21 @@ fun LifecycleHookService.useServicePresence(
     stateFlow: MutableStateFlow<Boolean>,
     name: String,
     startToastDelayMillis: Long = 0L,
+    /** 是否用 toast 提示启停；频繁显隐的服务（如快照按钮）可以关掉 */
+    showToast: Boolean = true,
     @CallSite loc: String = "",
 ) {
     onCreated {
         stateFlow.value = true
-        toast(UiStrings.service_started(name), delayMillis = startToastDelayMillis, loc = loc)
+        if (showToast) {
+            toast(UiStrings.service_started(name), delayMillis = startToastDelayMillis, loc = loc)
+        }
     }
     onDestroyed(loc = loc) {
         stateFlow.value = false
-        toast(UiStrings.service_stopped(name), loc = loc)
+        if (showToast) {
+            toast(UiStrings.service_stopped(name), loc = loc)
+        }
     }
 }
 

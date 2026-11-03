@@ -53,6 +53,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import li.gkd.app.MainActivity
 import li.gkd.app.MainViewModel
+import li.gkd.app.feature.subscription.SubsAppGroupListRoute
 import li.gkd.app.store.AppStore
 import li.gkd.app.ui.component.GkAlertDialog
 import li.gkd.app.ui.component.GkAppIcon
@@ -66,6 +67,7 @@ import li.gkd.app.util.TimeUtils.throttle
 import li.gkd.app.util.LogUtils
 import li.gkd.app.util.ToastUtils
 import li.gkd.app.util.ToastUtils.toast
+import li.gkd.db.LOCAL_SUBS_ID
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -132,7 +134,16 @@ fun AiConversationPage(route: AiConversationRoute) {
                     if (appId == null) {
                         Text(text = "AI 对话")
                     } else {
+                        // 点击 logo / 应用名直接跳到该 app 在本地订阅里的规则列表
                         Row(
+                            modifier = Modifier
+                                .clip(MaterialTheme.shapes.small)
+                                .clickable(onClick = throttle {
+                                    mainVm.navigatePage(
+                                        SubsAppGroupListRoute(LOCAL_SUBS_ID, appId),
+                                    )
+                                })
+                                .padding(horizontal = 4.dp, vertical = 2.dp),
                             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
@@ -211,10 +222,20 @@ fun AiConversationPage(route: AiConversationRoute) {
                 }
             } else {
                 itemsIndexed(current.messages) { index, message ->
+                    val appId = current.appId
+                    // 「已加入本地规则。」这条提示可点击，直接跳到该 app 的本地规则列表
+                    val onJumpToRule = if (message.content == AiConversation.ACCEPTED_RULE_MESSAGE) {
+                        throttle {
+                            mainVm.navigatePage(SubsAppGroupListRoute(LOCAL_SUBS_ID, appId))
+                        }
+                    } else {
+                        null
+                    }
                     MessageItem(
                         message = message,
                         isStreaming = current.status == AiConversation.STATUS_GENERATING &&
                             index == current.messages.lastIndex,
+                        onClick = onJumpToRule,
                     )
                 }
                 if (current.status == AiConversation.STATUS_GENERATING) {
@@ -425,7 +446,7 @@ private val messageTimeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
 private const val TAIL_SCROLL_DISTANCE = 100_000f
 
 @Composable
-private fun MessageItem(message: AiMessage, isStreaming: Boolean) {
+private fun MessageItem(message: AiMessage, isStreaming: Boolean, onClick: (() -> Unit)? = null) {
     val isUser = message.role == "user"
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -442,6 +463,13 @@ private fun MessageItem(message: AiMessage, isStreaming: Boolean) {
                     },
                     shape = MaterialTheme.shapes.medium,
                 )
+                .let {
+                    if (onClick != null) {
+                        it.clip(MaterialTheme.shapes.medium).clickable(onClick = onClick)
+                    } else {
+                        it
+                    }
+                }
                 .padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
             // 长按可选中复制；时间戳放在外面，避免复制时把时间一起带上
@@ -483,15 +511,35 @@ private fun MessageItem(message: AiMessage, isStreaming: Boolean) {
                             )
                         }
                     }
-                    Text(
-                        text = message.content,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (isUser) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        },
-                    )
+                    if (onClick != null) {
+                        // 可点击跳转的消息：末尾补一个右箭头，暗示「点进去」
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(
+                                text = message.content,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            GkIcon(
+                                imageVector = GkIcons.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = message.content,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (isUser) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                        )
+                    }
                 }
             }
             Text(

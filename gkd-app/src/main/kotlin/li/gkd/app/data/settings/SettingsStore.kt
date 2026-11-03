@@ -82,6 +82,10 @@ data class SettingsStore(
     val showDisabledRule: Boolean = true,
     val snapshotDisplayMode: Int = SnapshotDisplayModeOption.ByTime.value,
     val aiEnable: Boolean = false,
+    /** 点快照磁贴后跳过菜单，直接进入「我来选择」 */
+    val aiTileDirectPicker: Boolean = false,
+    /** 首次显示快照按钮时的「长按可关闭」提示是否已展示 */
+    val snapshotButtonHintShown: Boolean = false,
     val aiConfig: AiConfig = AiConfig(),
     /** 多选组件时「可以用第 N 个指代」的提示已展示次数；提醒两次后不再打扰 */
     val aiMultiSelectHintCount: Int = 0,

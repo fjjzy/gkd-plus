@@ -10,6 +10,10 @@ class AiWorkbenchVm : BaseViewModel() {
         AppStore.updateSettings { it.copy(aiEnable = enabled) }
     }
 
+    fun setAiTileDirectPicker(enabled: Boolean) {
+        AppStore.updateSettings { it.copy(aiTileDirectPicker = enabled) }
+    }
+
     fun deleteConversation(snapshotId: Long) {
         scope.launchUi {
             AiConversationStore.delete(snapshotId)
