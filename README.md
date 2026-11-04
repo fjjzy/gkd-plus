@@ -116,3 +116,7 @@ ColorOS 会在重启或清理后台时移除第三方无障碍条目，安全中
 本项目遵循 [GPL-3.0](/LICENSE) 开源，仅供学习交流，禁止用于商业或非法用途。
 
 本项目是 GKD 的独立增强分支，不代表原项目官方立场。如需了解原版 GKD，请访问 [gkd-kit/gkd](https://github.com/gkd-kit/gkd)。
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=fjjzy/gkd-plus&type=Date)](https://star-history.com/#fjjzy/gkd-plus&Date)
