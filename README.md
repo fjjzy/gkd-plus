@@ -40,7 +40,6 @@ GKD 是一个基于[高级选择器](https://gkd.li/guide/selector)、[订阅规
 </p>
 <p align="center">
   <img src="docs/images/quick-tile.jpg" width="200" alt="控制中心快照磁贴">
-  <img src="docs/images/button-menu.jpg" width="200" alt="快照按钮菜单">
   <img src="docs/images/simple-rule.jpg" width="200" alt="简易规则">
 </p>
 
