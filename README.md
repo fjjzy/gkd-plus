@@ -56,6 +56,18 @@ GKD 是一个基于[高级选择器](https://gkd.li/guide/selector)、[订阅规
 - 设置页支持「测试连接」
 - 推荐使用 Deepseek-v4-flash
 
+### 免费 Token（接入 AI 规则，持续更新）
+
+AI 规则需要一个大模型的 API Key。下面这些平台注册即可免费领额度，日常生成规则基本够用（链接含邀请码，双方可各得一点额外额度）：
+
+- **[智谱 GLM](https://www.bigmodel.cn/invite?icode=yCvPh23nfZNsM5u%2FU%2FCgqf2gad6AKpjZefIo3dVEQyA%3D)**：注册送 2000 万 token
+- **[硅基流动 SiliconFlow](https://cloud.siliconflow.cn/i/8H1WJOXd)**：注册送 16¥
+- **[七牛云](https://s.qiniu.com/JnyYjq)**：Conatus Free 模型在 11 月底前每天免费 1 亿 token，注册送 300 万 token
+- **[阿里云百炼](https://bailian.console.aliyun.com/cn-beijing/costing-balance/free-quota)**：每款模型 100 万 token 免费额度，90 天重置
+- **[Kimi](https://platform.kimi.com/console/account)**：注册送 15¥，约 100 万 token
+
+拿到 Key 后回到 `AI 规则工作台 - AI 规则设置` 填进去，点「测试连接」确认能通即可。
+
 ### AI 配置备份/恢复
 
 - 大模型配置（API URL、Key、模型等）纳入备份/导入体系
