@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.AutoMode
+import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Link
@@ -43,6 +44,7 @@ import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.BrightnessAuto
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.filled.PlayArrow
@@ -194,6 +196,8 @@ object GkIcons {
     val ExpandLess get() = Icons.Default.ExpandLess
     val ExpandMore get() = Icons.Default.ExpandMore
     val Memory get() = Icons.Default.Memory
+    val BatteryFull get() = Icons.Outlined.BatteryFull
+    val PowerSettingsNew get() = Icons.Outlined.PowerSettingsNew
     val Notifications get() = Icons.Outlined.Notifications
     val Layers get() = Icons.Outlined.Layers
     val Lock get() = Icons.Outlined.Lock

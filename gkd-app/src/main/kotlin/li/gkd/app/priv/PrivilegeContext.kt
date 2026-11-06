@@ -5,6 +5,7 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.IAccessibilityServiceClient
 import android.app.AppOpsManager
 import android.app.AppOpsManagerHidden
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageInfo
 import android.graphics.Bitmap
@@ -70,6 +71,35 @@ class PrivilegeContext private constructor(
             callingPackage = "com.android.shell",
             callingFeatureId = null,
         )
+    }
+
+    /**
+     * 部分厂商的自启动页受系统签名权限保护，普通应用无法直接启动。
+     * Root 身份启动时 ActivityManager 会放行这些组件；Shizuku 的 shell 身份没有该权限，直接返回 false。
+     */
+    suspend fun startActivityByRoot(component: ComponentName): Boolean {
+        if (serverInfo.uid != 0) return false
+        return try {
+            val process = Privilege.startCommand(
+                PrivilegeCommand(
+                    listOf("am", "start", "-n", "${component.packageName}/${component.className}"),
+                )
+            )
+            try {
+                val result = process.awaitResult()
+                val stderr = result.stderr.decodeToString()
+                LogUtils.d(
+                    "startActivityByRoot",
+                    "component=$component exitCode=${result.exitCode} stderr=${stderr.trim()}",
+                )
+                result.exitCode == 0 && !stderr.contains("Error") && !stderr.contains("Exception")
+            } finally {
+                process.close()
+            }
+        } catch (e: Throwable) {
+            LogUtils.d("startActivityByRoot", e)
+            false
+        }
     }
 
     fun topTask() = activityManager.getTasks().firstOrNull()

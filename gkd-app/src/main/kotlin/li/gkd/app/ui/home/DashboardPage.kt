@@ -258,6 +258,15 @@ fun useDashboardPage(): ScaffoldExt {
                     mainVm.navigatePage(li.gkd.app.feature.ai.AiWorkbenchRoute)
                 })
 
+            PageItemCard(
+                title = "GKD 保活引导",
+                subtitle = "自启动、电池优化、后台运行与开机自启",
+                imageVector = GkIcons.VerifiedUser,
+                onClickLabel = "打开 GKD 保活引导",
+                onClick = {
+                    mainVm.navigatePage(KeepAliveGuideRoute)
+                })
+
             var showManualUpdateDialog by remember { mutableStateOf(false) }
             PageItemCard(
                 title = "手动更新 APP",

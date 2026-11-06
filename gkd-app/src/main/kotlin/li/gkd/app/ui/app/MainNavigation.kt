@@ -72,6 +72,8 @@ import li.gkd.app.ui.home.HomePage
 import li.gkd.app.ui.home.BlockA11ySetupPage
 import li.gkd.app.ui.home.ActionToastPage
 import li.gkd.app.ui.home.ActionToastRoute
+import li.gkd.app.ui.home.KeepAliveGuidePage
+import li.gkd.app.ui.home.KeepAliveGuideRoute
 import li.gkd.app.ui.home.NotificationTextPage
 import li.gkd.app.ui.home.NotificationTextRoute
 import li.gkd.app.ui.home.BlockA11ySetupRoute
@@ -100,6 +102,7 @@ private val mainRouteEntryProvider = entryProvider {
     entry<ActionToastRoute>(metadata = editorTransitions) { ActionToastPage() }
     entry<NotificationTextRoute>(metadata = editorTransitions) { NotificationTextPage() }
     entry<BlockA11ySetupRoute>(metadata = editorTransitions) { BlockA11ySetupPage() }
+    entry<KeepAliveGuideRoute> { KeepAliveGuidePage() }
     entry<BlockA11yAppListRoute> { BlockA11yAppListPage() }
     entry<AdvancedPageRoute> { AdvancedPage() }
     entry<AiWorkbenchRoute> { AiWorkbenchPage() }

@@ -81,6 +81,11 @@ class AiConversationVm : BaseViewModel() {
         toast("已选中 $count 个组件：发消息时可以用「组件 1」「组件 2」分别指代")
     }
 
+    /** 用户点「规则不生效，请重试」/「生成失败，请重试」 */
+    fun retryRule(snapshotId: Long, feedback: String) {
+        AiRuleGenerator.retryConversationRule(snapshotId, feedback)
+    }
+
     fun acceptRule(snapshotId: Long) {
         appScope.launchLogged {
             AiRuleGenerator.acceptGeneratedRule(snapshotId)

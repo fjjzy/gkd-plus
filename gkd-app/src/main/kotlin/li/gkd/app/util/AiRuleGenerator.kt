@@ -28,6 +28,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import li.gkd.app.app
 import li.gkd.app.appScope
+import li.gkd.app.data.ComplexSnapshot
 import li.gkd.app.data.RawSubscription
 import li.gkd.app.data.settings.AiConfig
 import li.gkd.app.data.snapshot.SnapshotRepository
@@ -155,6 +156,15 @@ private val apiVersionSegment = Regex("""(?:^|/)v\d+(?:beta|alpha)?(?=/|$)""", R
 private val endpointSuffixes = listOf("/chat/completions", "/messages", "/completions", "/responses")
 
 private const val PROTOCOL_ANTHROPIC = "anthropic"
+
+/** AI 输出的选择器非法时，最多再重试几次（总数 = 1 + MAX_RULE_RETRY） */
+private const val MAX_RULE_RETRY = 2
+
+/** 规则入库后跟在后面的重试入口 */
+private const val RETRY_CARD_RULE_NOT_WORKING = "规则不生效，请重试"
+
+/** 生成失败后的重试入口 */
+private const val RETRY_CARD_GENERATE_FAILED = "生成失败，请重试"
 
 private val apiUrlScheme = Regex("""^https?:/*""", RegexOption.IGNORE_CASE)
 
@@ -624,11 +634,25 @@ object AiRuleGenerator {
                     " autoAccept=$autoAccept"
             )
             val prompt = loadPrompt()
-            val snapshotJson = withContext(Dispatchers.IO) {
-                SnapshotRepository.snapshotFile(snapshotId).readText()
-            }
             // 选中的目标组件作为会话级上下文放进 system 消息（格式与 prompt 的「上下文说明」一致）
             val selected = AiConversationStore.get(snapshotId)?.selectedComponents.orEmpty()
+            // 发送版快照：裁剪字段；有选中组件时只发相关子树，完整快照仍保留在本地
+            val snapshotText = withContext(Dispatchers.IO) {
+                SnapshotRepository.snapshotFile(snapshotId).readText()
+            }
+            val snapshot = withContext(Dispatchers.IO) {
+                runCatching {
+                    keepNullJson.decodeFromString<ComplexSnapshot>(snapshotText)
+                }.getOrNull()
+            }
+            val snapshotJson = if (snapshot != null) {
+                withContext(Dispatchers.Default) {
+                    AiSnapshotUtils.buildModelSnapshot(snapshot, selected)
+                }
+            } else {
+                snapshotText
+            }
+            LogUtils.d("AI snapshot chars: ${snapshotText.length} -> ${snapshotJson.length}")
             val componentsBlock = buildString {
                 append("\n\n## 用户当前选中的组件\n")
                 if (selected.isEmpty()) {
@@ -650,72 +674,145 @@ object AiRuleGenerator {
                 append("\n\n## 当前快照（快照 id: ")
                 append(snapshotId)
                 append("）\n")
+                if (selected.isNotEmpty()) {
+                    append("（已按选中组件裁剪：只包含根到目标的路径、目标子树和路径各层的兄弟节点；")
+                    append("未展开的兄弟节点没有子节点数据，不要对它们使用 getChild 或子节点条件；")
+                    append("关系偏移以这份子树为准。）\n")
+                } else {
+                    append("（已省略模型用不到的属性；未出现的布尔字段表示 false，")
+                    append("未出现 visibleToUser 表示 true。）\n")
+                }
                 append(snapshotJson)
                 append(componentsBlock)
             }
-            val history = AiConversationStore.get(snapshotId)?.messages.orEmpty()
-                .filter { it.role == "user" || it.role == "assistant" }
-                .map { ChatMessage(role = it.role, content = it.content) }
-                .let { messages ->
-                    if (messages.none { it.role == "user" }) {
-                        listOf(ChatMessage("user", "请为该快照生成关闭/点击规则。")) + messages
-                    } else {
-                        messages
+            fun buildHistory(extraTurns: List<ChatMessage>): List<ChatMessage> {
+                val messages = AiConversationStore.get(snapshotId)?.messages.orEmpty()
+                    // 「已加入本地规则」「请重试」是界面卡片，不参与模型上下文
+                    .filter {
+                        (it.role == "user" || it.role == "assistant") &&
+                            it.kind == AiMessage.KIND_TEXT
                     }
-                }
-            // 流式生成：每个 delta 追加到会话最后一条 assistant 消息（实时渲染）
-            // 被截断时用更大预算重试，重试前丢弃上一次的残留内容，避免拼接
-            val reply = callAiApiStreamWithMaxTokensTuning(
-                request = AiCallRequest(config = config, system = system, messages = history),
-                onRetry = { AiConversationStore.dropLastMessage(snapshotId) },
-                onReasoning = { delta ->
-                    AiConversationStore.appendReasoningToLastMessage(snapshotId, delta)
-                },
-            ) { delta ->
-                AiConversationStore.appendToLastMessage(snapshotId, delta)
-            }
-            val content = reply.content.trim()
-            if (content.isEmpty()) {
-                failConversation(snapshotId, emptyReplyReason(reply))
-                return
-            }
-            val ruleText = extractRuleJson(content)
-            val rule = ruleText?.let { parseAndValidateRule(it) }
-            if (rule != null) {
-                if (autoAccept) {
-                    // 自动来源：直接入库并标记「已加入」，用户在工作台能看到这轮对话和结果
-                    insertRuleToSubscription(rule)
-                    LogUtils.d("AI rule accepted: snapshotId=$snapshotId, ruleChars=${ruleText.length}")
-                    AiConversationStore.appendMessage(
-                        snapshotId = snapshotId,
-                        message = AiMessage(
-                            role = "assistant",
-                            content = AiConversation.ACCEPTED_RULE_MESSAGE,
-                            time = System.currentTimeMillis(),
-                            kind = AiMessage.KIND_ACCEPTED_RULE,
-                        ),
-                        status = AiConversation.STATUS_ACCEPTED,
-                    )
-                    if (notifyUser) {
-                        ToastUtils.toast("AI 规则已生成并加入本地规则")
-                    }
+                    .map { ChatMessage(role = it.role, content = it.content) }
+                val base = if (messages.none { it.role == "user" }) {
+                    listOf(ChatMessage("user", "请为该快照生成关闭/点击规则。")) + messages
                 } else {
-                    // 不自动入库：等待用户在会话里点「加入规则」
-                    AiConversationStore.updateStatus(
-                        snapshotId,
-                        AiConversation.STATUS_RULE_READY,
-                        lastRule = ruleText,
-                    )
-                    if (notifyUser) {
-                        ToastUtils.toast("AI 规则已生成，可在 AI 规则工作台查看")
+                    messages
+                }
+                return base + extraTurns
+            }
+            // 非法选择器不落库：丢掉这条回复，把校验错误带回给模型重试，
+            // 最多重试 MAX_RULE_RETRY 次；仍然失败才标记会话失败。
+            // 被丢弃的回复只存在于内存里的 extraTurns，会话页不会留下无效内容。
+            val extraTurns = mutableListOf<ChatMessage>()
+            var lastError: String? = null
+            var attempt = 0
+            while (true) {
+                attempt++
+                // 记录本轮开始前的消息数：非流式回退不会写入 assistant 消息，
+                // 只有确实新增了消息才能 drop，避免误删上一轮的回复。
+                val messageCountBefore = AiConversationStore.get(snapshotId)?.messages?.size ?: 0
+                // 流式生成：每个 delta 追加到会话最后一条 assistant 消息（实时渲染）
+                // 被截断时用更大预算重试，重试前丢弃上一次的残留内容，避免拼接
+                val reply = callAiApiStreamWithMaxTokensTuning(
+                    request = AiCallRequest(
+                        config = config,
+                        system = system,
+                        messages = buildHistory(extraTurns),
+                    ),
+                    onRetry = { AiConversationStore.dropLastMessage(snapshotId) },
+                    onReasoning = { delta ->
+                        AiConversationStore.appendReasoningToLastMessage(snapshotId, delta)
+                    },
+                ) { delta ->
+                    AiConversationStore.appendToLastMessage(snapshotId, delta)
+                }
+                // 保留未 trim 的原文用于下一轮请求：前缀完全一致才能命中服务端 KV 缓存
+                val rawContent = reply.content
+                val content = rawContent.trim()
+                if (content.isEmpty()) {
+                    failConversation(snapshotId, emptyReplyReason(reply))
+                    return
+                }
+                val ruleText = extractRuleJson(content)
+                if (ruleText == null) {
+                    if (attempt == 1) {
+                        // 首轮就没有 json 代码块：普通对话回复，属于正常情况
+                        AiConversationStore.updateStatus(snapshotId, AiConversation.STATUS_SUCCESS)
+                        if (notifyUser) {
+                            ToastUtils.toast("AI 已回复，可在 AI 规则工作台查看")
+                        }
+                        return
+                    }
+                    lastError = "没有输出 ```json 代码块"
+                } else {
+                    when (val result = validateRuleText(ruleText)) {
+                        is RuleValidationResult.Success -> {
+                            val rule = result.subscription
+                            // 语法通过后再在快照树上真跑一遍，拦住「没命中 / 命中多个 / 非选中目标 / 不可点击」
+                            val staticError = snapshot?.let {
+                                runCatching {
+                                    AiSnapshotValidator.validate(it, rule, selected)
+                                }.getOrNull()
+                            }
+                            if (staticError != null) {
+                                lastError = staticError
+                            } else {
+                                if (autoAccept) {
+                                    // 自动来源：直接入库并标记「已加入」，用户在工作台能看到这轮对话和结果
+                                    insertRuleToSubscription(rule)
+                                    LogUtils.d(
+                                        "AI rule accepted: snapshotId=$snapshotId, ruleChars=${ruleText.length}"
+                                    )
+                                    AiConversationStore.appendMessage(
+                                        snapshotId = snapshotId,
+                                        message = AiMessage(
+                                            role = "assistant",
+                                            content = AiConversation.ACCEPTED_RULE_MESSAGE,
+                                            time = System.currentTimeMillis(),
+                                            kind = AiMessage.KIND_ACCEPTED_RULE,
+                                        ),
+                                        status = AiConversation.STATUS_ACCEPTED,
+                                    )
+                                    appendRetryCard(snapshotId, RETRY_CARD_RULE_NOT_WORKING)
+                                    if (notifyUser) {
+                                        ToastUtils.toast("AI 规则已生成并加入本地规则")
+                                    }
+                                } else {
+                                    // 不自动入库：等待用户在会话里点「加入规则」
+                                    AiConversationStore.updateStatus(
+                                        snapshotId = snapshotId,
+                                        status = AiConversation.STATUS_RULE_READY,
+                                        lastRule = ruleText,
+                                    )
+                                    if (notifyUser) {
+                                        ToastUtils.toast("AI 规则已生成，可在 AI 规则工作台查看")
+                                    }
+                                }
+                                return
+                            }
+                        }
+
+                        is RuleValidationResult.Invalid -> lastError = result.reason
                     }
                 }
-            } else {
-                // 只是普通对话回复，没有规则，属于正常情况
-                AiConversationStore.updateStatus(snapshotId, AiConversation.STATUS_SUCCESS)
-                if (notifyUser) {
-                    ToastUtils.toast("AI 已回复，可在 AI 规则工作台查看")
+                // 到这里的回复要么没有规则、要么选择器非法：先清掉，避免把它当有效结果展示
+                val messageCountAfter = AiConversationStore.get(snapshotId)?.messages?.size ?: 0
+                if (messageCountAfter > messageCountBefore) {
+                    AiConversationStore.dropLastMessage(snapshotId)
                 }
+                if (attempt > MAX_RULE_RETRY) {
+                    failConversation(
+                        snapshotId,
+                        "AI 连续 ${MAX_RULE_RETRY + 1} 次输出无法通过校验，未加入本地规则。\n${lastError.orEmpty()}",
+                    )
+                    return
+                }
+                LogUtils.d("AI rule invalid, retry #$attempt: $lastError")
+                if (notifyUser) {
+                    ToastUtils.toast("选择器校验失败，正在让 AI 重试（$attempt/$MAX_RULE_RETRY）")
+                }
+                extraTurns += ChatMessage("assistant", rawContent)
+                extraTurns += ChatMessage("user", buildRuleRetryPrompt(lastError.orEmpty()))
             }
         } catch (e: CancellationException) {
             // 用户点了停止：保留已经流式写进去的内容，状态回到可继续发送
@@ -735,6 +832,7 @@ object AiRuleGenerator {
                 ),
                 status = AiConversation.STATUS_FAILED,
             )
+            appendRetryCard(snapshotId, RETRY_CARD_GENERATE_FAILED)
         }
     }
 
@@ -791,6 +889,25 @@ object AiRuleGenerator {
         runningJobs.remove(snapshotId)?.cancel()
     }
 
+    /**
+     * 用户点「规则不生效，请重试」/「生成失败，请重试」：
+     * 把卡片文案本身作为用户反馈追加到会话，再发起新一轮生成。
+     * 放在 beforeGenerate 里，重复点击时 runningJobs 已经拦下，不会写出多余消息。
+     */
+    fun retryConversationRule(snapshotId: Long, feedback: String) = launchConversationRule(
+        snapshotId = snapshotId,
+        beforeGenerate = {
+            AiConversationStore.appendMessage(
+                snapshotId = snapshotId,
+                message = AiMessage(
+                    role = "user",
+                    content = feedback,
+                    time = System.currentTimeMillis(),
+                ),
+            )
+        },
+    )
+
     /** 该会话当前是否真的有生成任务在跑（进程重启后一定是 false） */
     fun isConversationRunning(snapshotId: Long): Boolean =
         runningJobs[snapshotId]?.isActive == true
@@ -805,6 +922,23 @@ object AiRuleGenerator {
                 time = System.currentTimeMillis(),
             ),
             status = AiConversation.STATUS_FAILED,
+        )
+        appendRetryCard(snapshotId, RETRY_CARD_GENERATE_FAILED)
+    }
+
+    /**
+     * 追加一条可点击的重试入口。消息类型交给 UI 判断，不比对文案。
+     * 不传 status，避免覆盖当前会话状态。
+     */
+    private suspend fun appendRetryCard(snapshotId: Long, text: String) {
+        AiConversationStore.appendMessage(
+            snapshotId = snapshotId,
+            message = AiMessage(
+                role = "assistant",
+                content = text,
+                time = System.currentTimeMillis(),
+                kind = AiMessage.KIND_RULE_RETRY,
+            ),
         )
     }
 
@@ -827,10 +961,42 @@ object AiRuleGenerator {
         if (conversation.status != AiConversation.STATUS_RULE_READY || ruleText.isNullOrBlank()) {
             return
         }
-        val rule = parseAndValidateRule(ruleText)
-        if (rule == null) {
-            ToastUtils.toast("规则数据已失效，请重新生成")
-            AiConversationStore.updateStatus(snapshotId, AiConversation.STATUS_FAILED)
+        val rule = when (val result = validateRuleText(ruleText)) {
+            is RuleValidationResult.Success -> result.subscription
+            is RuleValidationResult.Invalid -> {
+                AiConversationStore.appendMessage(
+                    snapshotId = snapshotId,
+                    message = AiMessage(
+                        role = "assistant",
+                        content = "规则已失效，请重新生成\n${result.reason}",
+                        time = System.currentTimeMillis(),
+                    ),
+                    status = AiConversation.STATUS_FAILED,
+                )
+                appendRetryCard(snapshotId, RETRY_CARD_GENERATE_FAILED)
+                ToastUtils.toast("规则已失效，请重新生成")
+                return
+            }
+        }
+        val staticError = runCatching {
+            val snapshotText = withContext(Dispatchers.IO) {
+                SnapshotRepository.snapshotFile(snapshotId).readText()
+            }
+            val snapshot = keepNullJson.decodeFromString<ComplexSnapshot>(snapshotText)
+            AiSnapshotValidator.validate(snapshot, rule, conversation.selectedComponents)
+        }.getOrNull()
+        if (staticError != null) {
+            AiConversationStore.appendMessage(
+                snapshotId = snapshotId,
+                message = AiMessage(
+                    role = "assistant",
+                    content = "规则在当前快照中校验失败，未加入本地订阅\n$staticError",
+                    time = System.currentTimeMillis(),
+                ),
+                status = AiConversation.STATUS_FAILED,
+            )
+            appendRetryCard(snapshotId, RETRY_CARD_GENERATE_FAILED)
+            ToastUtils.toast("规则在当前快照中不可用，请重试")
             return
         }
         insertRuleToSubscription(rule)
@@ -844,6 +1010,7 @@ object AiRuleGenerator {
             ),
             status = AiConversation.STATUS_SUCCESS,
         )
+        appendRetryCard(snapshotId, RETRY_CARD_RULE_NOT_WORKING)
         ToastUtils.toast("规则已加入本地订阅")
     }
 
@@ -1183,38 +1350,74 @@ object AiRuleGenerator {
         return null
     }
 
-    private fun parseAndValidateRule(text: String): RawSubscription? {
-        // First try parsing as full subscription
-        try {
-            val subs = RawSubscription.parse(text, json5 = true)
-            if (subs.hasRule) return subs
-        } catch (_: Exception) {}
-        try {
-            val subs = RawSubscription.parse(text, json5 = false)
-            if (subs.hasRule) return subs
-        } catch (_: Exception) {}
+    private sealed interface RuleValidationResult {
+        data class Success(val subscription: RawSubscription) : RuleValidationResult
+        data class Invalid(val reason: String) : RuleValidationResult
+    }
 
-        // AI typically outputs an App-level JSON (id=packageName, groups=[...])
-        // Wrap it into a subscription structure
-        try {
-            val jsonElement = json.parseToJsonElement(text)
-            val app = RawSubscription.parseApp(jsonElement.jsonObject)
+    /**
+     * 解析并校验 AI 输出的规则。**只有选择器能编译、类型校验通过、规则组非空才算成功**，
+     * 否则返回具体错误交给上一层重试——非法规则绝不能写进本地订阅。
+     */
+    private fun validateRuleText(text: String): RuleValidationResult {
+        // 完整订阅结构
+        for (json5 in listOf(true, false)) {
+            val subs = runCatching { RawSubscription.parse(text, json5 = json5) }.getOrNull()
+            if (subs != null && subs.hasRule) {
+                val error = findGroupError(subs.globalGroups)
+                    ?: findGroupError(subs.apps.flatMap { it.groups })
+                return if (error == null) {
+                    RuleValidationResult.Success(subs)
+                } else {
+                    RuleValidationResult.Invalid(error)
+                }
+            }
+        }
+        // AI 通常输出应用级 JSON（id=包名，groups=[...]），包装成最小订阅
+        val app = runCatching {
+            RawSubscription.parseApp(json.parseToJsonElement(text).jsonObject)
+        }.getOrNull()
+        if (app != null) {
             LogUtils.d("AI parsed as RawApp: id=${app.id}, groups=${app.groups.size}")
             if (app.groups.isEmpty()) {
-                return null
+                return RuleValidationResult.Invalid("规则 JSON 里没有 groups")
             }
-            // Build a minimal subscription containing this app
-            return RawSubscription(
-                id = -1L,
-                name = "AI Generated",
-                version = 1,
-                apps = listOf(app),
+            val error = findGroupError(app.groups)
+            if (error != null) return RuleValidationResult.Invalid(error)
+            return RuleValidationResult.Success(
+                RawSubscription(
+                    id = -1L,
+                    name = "AI Generated",
+                    version = 1,
+                    apps = listOf(app),
+                )
             )
-        } catch (e: Exception) {
-            LogUtils.d("AI parse as app failed: ${e.message}")
-            LogUtils.d("AI failed text (first 500 chars): ${text.take(500)}")
-            return null
         }
+        LogUtils.d("AI failed text (first 500 chars): ${text.take(500)}")
+        return RuleValidationResult.Invalid("JSON 无法解析为 GKD 规则")
+    }
+
+    /** 返回第一个非法的规则组原因；没有规则或选择器非法都会让整份规则不可用 */
+    private fun findGroupError(groups: List<RawSubscription.RawGroupProps>): String? {
+        groups.forEach { group ->
+            if (group.rules.isEmpty()) {
+                return "规则组「${group.name}」没有任何 rules"
+            }
+            group.errorDesc?.let { return it }
+        }
+        return null
+    }
+
+    /** 把校验错误带回给模型；只让它修正语法，不允许靠改匹配逻辑绕过 */
+    private fun buildRuleRetryPrompt(error: String): String = buildString {
+        append("上一次输出的规则没有通过 GKD 校验：\n")
+        append(error.trim())
+        append("\n\n请先判断错误类型，再决定改法：")
+        append("\n- 语法/结构错误：关系操作符不能连写、两侧必须有空格、[] 与引号必须配对、只能用文档列出的属性")
+        append("\n- 匹配错误（没命中 / 命中多个 / 不是选中目标 / 目标不可点击 / 坐标目标过小）：")
+        append("按「非法和无效是两件事」分诊，调整定位、层级或 action，不要只换属性")
+        append("\n- 同一类错误已经连续出现两次时，按「连续两次失败后换思路」更换策略")
+        append("\n只输出修正后的完整规则，不要解释。")
     }
 
     private suspend fun insertRuleToSubscription(newSubs: RawSubscription) {

@@ -56,6 +56,7 @@ import li.gkd.app.ui.style.itemHorizontalPadding
 import li.gkd.app.ui.style.itemVerticalPadding
 import li.gkd.app.ui.style.titleItemPadding
 import li.gkd.app.ui.share.launchUiAction
+import li.gkd.app.util.IntentUtils
 import li.gkd.app.util.TimeUtils.throttle
 import li.gkd.app.ui.component.GkAlertDialog
 import li.gkd.app.ui.component.GkIconButton
@@ -130,6 +131,7 @@ private fun AdvancedContent() {
         AiSettingsDialog(
             aiConfig = store.aiConfig,
             onDismissRequest = { showAiConfigDialog = false },
+            onOpenExternalUrl = IntentUtils::openUri,
         )
     }
 

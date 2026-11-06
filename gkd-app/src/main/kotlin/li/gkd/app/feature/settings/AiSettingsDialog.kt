@@ -53,10 +53,14 @@ import li.gkd.app.util.ToastUtils.toast
 import li.gkd.app.util.findOption
 import li.gkd.app.util.launchLogged
 
+/** 免费 token 来源汇总页 */
+private const val FREE_TOKEN_SOURCES_URL = "https://ichiki.top/log/free-llm-token-sources"
+
 @Composable
 fun AiSettingsDialog(
     aiConfig: AiConfig,
     onDismissRequest: () -> Unit,
+    onOpenExternalUrl: (String) -> Unit,
 ) {
     var protocolValue by remember(aiConfig) { mutableStateOf(aiConfig.protocol) }
     var apiUrlValue by remember(aiConfig) { mutableStateOf(aiConfig.apiUrl) }
@@ -471,6 +475,13 @@ fun AiSettingsDialog(
                             },
                             modifier = Modifier.align(Alignment.CenterVertically),
                         )
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
+                    TextButton(onClick = throttle {
+                        toast("持续更新免费的 AI")
+                        onOpenExternalUrl(FREE_TOKEN_SOURCES_URL)
+                    }) {
+                        Text(text = "免费 token")
                     }
                 }
             }

@@ -23,6 +23,9 @@ data class AiMessage(
     companion object {
         const val KIND_TEXT = ""
         const val KIND_ACCEPTED_RULE = "accepted_rule"
+
+        /** 规则不生效 / 生成失败后的重试入口，点击触发重新生成 */
+        const val KIND_RULE_RETRY = "rule_retry"
     }
 }
 

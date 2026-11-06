@@ -50,6 +50,7 @@ import li.gkd.app.ui.component.GkTextSwitch
 import li.gkd.app.ui.component.GkTopAppBar
 import li.gkd.app.ui.style.itemHorizontalPadding
 import li.gkd.app.ui.style.surfaceCardColors
+import li.gkd.app.util.IntentUtils
 import li.gkd.app.util.TimeUtils.throttle
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -71,6 +72,7 @@ fun AiWorkbenchPage() {
         AiSettingsDialog(
             aiConfig = store.aiConfig,
             onDismissRequest = { showAiConfigDialog = false },
+            onOpenExternalUrl = IntentUtils::openUri,
         )
     }
     deleteRequest?.let { conversation ->

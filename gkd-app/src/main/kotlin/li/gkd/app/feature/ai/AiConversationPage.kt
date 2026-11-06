@@ -223,16 +223,24 @@ fun AiConversationPage(route: AiConversationRoute) {
             } else {
                 itemsIndexed(current.messages) { index, message ->
                     // 只认消息类型标记，不比对展示文案；用户消息即使文案相同也不会变成入口
-                    val onJumpToRule = if (message.kind == AiMessage.KIND_ACCEPTED_RULE) {
-                        throttle { openLocalRules(current.appId) }
-                    } else {
-                        null
+                    val onClick = when (message.kind) {
+                        AiMessage.KIND_ACCEPTED_RULE -> throttle { openLocalRules(current.appId) }
+                        AiMessage.KIND_RULE_RETRY -> if (
+                            current.status == AiConversation.STATUS_GENERATING
+                        ) {
+                            // 生成中再点没有意义，等这一轮结束再允许重试
+                            null
+                        } else {
+                            throttle { vm.retryRule(route.snapshotId, message.content) }
+                        }
+
+                        else -> null
                     }
                     MessageItem(
                         message = message,
                         isStreaming = current.status == AiConversation.STATUS_GENERATING &&
                             index == current.messages.lastIndex,
-                        onClick = onJumpToRule,
+                        onClick = onClick,
                     )
                 }
                 if (current.status == AiConversation.STATUS_GENERATING) {
