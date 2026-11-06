@@ -1,0 +1,74 @@
+package li.gkd.app.ui.platform
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
+import li.gkd.app.permission.PermissionStates
+import li.gkd.app.platform.PlatformResult
+import li.gkd.app.priv.privilegeContextFlow
+import li.gkd.app.resources.*
+import li.gkd.app.service.switchAutomatorService
+import li.gkd.app.util.AndroidTarget
+import li.gkd.app.util.IntentUtils
+import li.gkd.app.util.ToastUtils
+
+@Composable
+actual fun privilegeAvailable() = privilegeContextFlow.collectAsStateWithLifecycle().value != null
+
+@Composable
+actual fun ignoresBatteryOptimizations() =
+    PermissionStates.ignoreBatteryOptimizations.stateFlow.collectAsStateWithLifecycle().value
+
+@Composable
+actual fun RefreshPermissions() {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            withContext(Dispatchers.IO) {
+                while (isActive) {
+                    PermissionStates.refreshAll()
+                    delay(1000)
+                }
+            }
+        }
+    }
+}
+
+actual fun openAppDetails() {
+    IntentUtils.openAppDetailsSettings()
+}
+
+actual fun openAutoStartSettings() {
+    IntentUtils.openAutoStartSettings()
+}
+
+actual fun UiHost.launchApp(appId: String): PlatformResult<Boolean> {
+    val intent =
+        packageManager.getLaunchIntentForPackage(appId) ?: return PlatformResult.Success(false)
+    startActivity(intent)
+    return PlatformResult.Success(true)
+}
+
+actual suspend fun openRecents() {
+    val context = privilegeContextFlow.value
+    if (context?.keyevent(android.view.KeyEvent.KEYCODE_APP_SWITCH) != true) {
+        ToastUtils.show(Res.string.recents_lock_manual_hint.getSync())
+    }
+}
+
+actual fun openA11ySettings() {
+    IntentUtils.openA11ySettings()
+}
+
+actual fun switchAutomator() {
+    switchAutomatorService()
+}
+
+actual fun dynamicColorAvailable() = AndroidTarget.S

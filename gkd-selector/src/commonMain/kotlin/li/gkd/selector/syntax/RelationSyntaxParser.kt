@@ -1,36 +1,40 @@
 package li.gkd.selector.syntax
 
 import li.gkd.selector.SelectorPositionKind
+import li.gkd.selector.relation.PolynomialExpression
 import li.gkd.selector.relation.RelationExpression
 import li.gkd.selector.relation.RelationOperator
 import li.gkd.selector.relation.RelationSelector
-import li.gkd.selector.relation.PolynomialExpression
 import li.gkd.selector.relation.TupleExpression
 
 internal class RelationSyntaxParser(
     private val context: ParserContext,
 ) {
-    private val cursor = context.cursor
+    private val cursor
+        get() = context.cursor
 
     private class Monomial(
         val coefficient: Int,
         val power: Int,
     )
 
-    fun readRelationSelector(): RelationSelector = context.positioned(SelectorPositionKind.Relation) {
-        val operator = readOperator()
-        val expression = if (cursor.current.isOneOf("(n$DIGIT_CHARS")) {
-            readExpression()
-        } else {
-            PolynomialExpression()
+    fun readRelationSelector(): RelationSelector =
+        context.positioned(SelectorPositionKind.Relation) {
+            val operator = readOperator()
+            val expression =
+                if (cursor.current.isOneOf("(n$DIGIT_CHARS")) {
+                    readExpression()
+                } else {
+                    PolynomialExpression()
+                }
+            RelationSelector(operator, expression)
         }
-        RelationSelector(operator, expression)
-    }
 
     private fun readOperator(): RelationOperator {
-        val operator = RelationOperator.parseOrder.firstOrNull {
-            cursor.source.startsWith(it.key, cursor.index)
-        } ?: cursor.errorExpected("relation operator")
+        val operator =
+            RelationOperator.parseOrder.firstOrNull {
+                cursor.source.startsWith(it.key, cursor.index)
+            } ?: cursor.errorExpected("relation operator")
         cursor.index += operator.key.length
         return operator
     }
@@ -78,32 +82,36 @@ internal class RelationSyntaxParser(
 
     private fun readMonomial(): Monomial {
         cursor.expectOneOf("+-n$DIGIT_CHARS", "monomial")
-        val sign = when (cursor.current) {
-            '+' -> {
-                cursor.index++
-                1
-            }
+        val sign =
+            when (cursor.current) {
+                '+' -> {
+                    cursor.index++
+                    1
+                }
 
-            '-' -> {
-                cursor.index++
-                -1
-            }
+                '-' -> {
+                    cursor.index++
+                    -1
+                }
 
-            else -> 1
-        }
+                else -> 1
+            }
         cursor.readWhitespace()
         cursor.expectOneOf("n$DIGIT_CHARS", "monomial value")
-        val coefficient = sign * if (cursor.current.isOneOf(DIGIT_CHARS)) {
-            cursor.readUnsignedInt()
-        } else {
-            1
-        }
-        val power = if (cursor.current == 'n') {
-            cursor.index++
-            1
-        } else {
-            0
-        }
+        val coefficient =
+            sign *
+                if (cursor.current.isOneOf(DIGIT_CHARS)) {
+                    cursor.readUnsignedInt()
+                } else {
+                    1
+                }
+        val power =
+            if (cursor.current == 'n') {
+                cursor.index++
+                1
+            } else {
+                0
+            }
         return Monomial(coefficient, power)
     }
 

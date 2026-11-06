@@ -1,4 +1,4 @@
 packages:
   - gkd-selector
-minimumReleaseAgeExclude:
-  - regex-wasm@0.1.1
+allowBuilds:
+  simple-git-hooks: false

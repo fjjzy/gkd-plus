@@ -1,0 +1,97 @@
+name: build
+
+on:
+  workflow_dispatch:
+
+  push:
+    branches:
+      - '**'
+    paths-ignore:
+      - 'LICENSE'
+      - '*.md'
+      - '.github/**'
+
+jobs:
+  build-android:
+    if: ${{ !startsWith(github.event.head_commit.message, 'chore:') && !startsWith(github.event.head_commit.message, 'chore(') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_CACHE_ENCRYPTION_KEY }}
+
+      - name: write gkd keystore
+        run: echo ${{ secrets.GKD_STORE_FILE_BASE64 }} | base64 --decode > ${{ github.workspace }}/gkd.jks
+
+      - run: ./gradlew :gkd-android:assembleGkdRelease
+        env:
+          GKD_GITHUB_COOKIE: ${{ secrets.GKD_GITHUB_COOKIE }}
+          GKD_API_AUTH_TOKEN: ${{ secrets.GKD_API_AUTH_TOKEN }}
+          GKD_SERVER_TOKEN: ${{ secrets.GKD_API_AUTH_TOKEN }}
+          GKD_STORE_FILE: ${{ github.workspace }}/gkd.jks
+          GKD_STORE_PASSWORD: ${{ secrets.GKD_STORE_PASSWORD }}
+          GKD_KEY_ALIAS: ${{ secrets.GKD_KEY_ALIAS }}
+          GKD_KEY_PASSWORD: ${{ secrets.GKD_KEY_PASSWORD }}
+          GKD_RENAME_PACKAGE_FLAG: "1"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          archive: false
+          path: gkd-android/build/outputs/apk/gkd/release/*.apk
+
+      - name: derive outputs artifact name from APK
+        id: outputs-artifact
+        shell: bash
+        run: |
+          apk_files=(gkd-android/build/outputs/apk/gkd/release/gkd-v*.apk)
+          [[ ${#apk_files[@]} -eq 1 && -f "${apk_files[0]}" ]]
+          apk_name=$(basename "${apk_files[0]}" .apk)
+          echo "name=${apk_name}.outputs" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.outputs-artifact.outputs.name }}
+          path: gkd-android/build/outputs
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_CACHE_ENCRYPTION_KEY }}
+
+      - name: run matching regression and build Windows portable package
+        run: ./gradlew.bat :gkd-app:matchingRegression :gkd-app:packageWindowsPortable
+        env:
+          GKD_RENAME_PACKAGE_FLAG: "1"
+
+      - name: upload matching regression report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: matching-regression
+          path: |
+            gkd-app/build/reports/tests/matchingRegression
+            gkd-app/build/test-results/matchingRegression
+          if-no-files-found: warn
+
+      - uses: actions/upload-artifact@v7
+        with:
+          archive: false
+          include-hidden-files: true
+          if-no-files-found: error
+          path: .local/desktop-packages/gkd-v*.win-*.zip

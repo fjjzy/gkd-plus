@@ -21,7 +21,7 @@ class A11yEventLog(
     @ColumnInfo(name = "app_id") val appId: String,
     @ColumnInfo(name = "name") val name: String,
     @ColumnInfo(name = "desc") val desc: String?,
-    @ColumnInfo(name = "text") val text: List<String>,
+    @ColumnInfo(name = "text") val text: String,
 ) {
     override fun equals(other: Any?): Boolean {
         if (other !is A11yEventLog) return false
@@ -35,36 +35,26 @@ class A11yEventLog(
     @Dao
     @DaoReturnTypeConverters(PagingSourceDaoReturnTypeConverter::class)
     interface A11yEventLogDao {
-        @Insert
-        suspend fun insert(objects: List<A11yEventLog>): List<Long>
+        @Insert suspend fun insert(objects: List<A11yEventLog>): List<Long>
 
-        @Query("SELECT COUNT(*) FROM a11y_event_log")
-        fun count(): Flow<Int>
+        @Query("SELECT COUNT(*) FROM a11y_event_log") fun count(): Flow<Int>
 
         @Query("SELECT * FROM a11y_event_log ORDER BY ctime DESC ")
         fun pagingSource(): PagingSource<Int, A11yEventLog>
 
-        @Query("SELECT MAX(id) FROM a11y_event_log")
-        suspend fun maxId(): Int?
+        @Query("SELECT MAX(id) FROM a11y_event_log") suspend fun maxId(): Int?
 
         @Query(
             """
             DELETE FROM a11y_event_log
-            WHERE (
-                    SELECT COUNT(*)
-                    FROM a11y_event_log
-                ) > 1000
-                AND id <= (
+            WHERE id <= (
                     SELECT id
                     FROM a11y_event_log
                     ORDER BY id DESC
                     LIMIT 1 OFFSET 1000
                 )
-        """
+        """,
         )
         suspend fun deleteKeepLatest(): Int
-
-
     }
-
 }

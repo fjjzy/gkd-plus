@@ -5,8 +5,11 @@ import androidx.room3.withWriteTransaction
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.Serializable
+import li.gkd.db.Db.database
 
 // A single checkpoint for the subscription metadata and all of its user overrides.
+@Serializable
 data class SubscriptionConfigSnapshot(
     val subsItems: List<SubsItem> = emptyList(),
     val appConfigs: List<SubsAppConfig> = emptyList(),
@@ -15,13 +18,14 @@ data class SubscriptionConfigSnapshot(
     val globalGroupConfigs: List<SubsGlobalGroupConfig> = emptyList(),
 )
 
-class SubscriptionConfigStore(private val database: AppDb) {
-    suspend fun setAppEnabled(subsId: Long, appId: String, enabled: Boolean?) = database.withWriteTransaction {
-        val dao = database.subsAppConfigDao()
-        val current = dao.querySubsItemConfig(listOf(subsId)).find { it.appId == appId }
-        if (enabled == null) current?.let { dao.delete(it) }
-        else if (current?.enable != enabled) dao.upsert(SubsAppConfig(enabled, subsId, appId))
-    }
+object SubscriptionConfigStore {
+    suspend fun setAppEnabled(subsId: Long, appId: String, enabled: Boolean?) =
+        database.withWriteTransaction {
+            val dao = database.subsAppConfigDao()
+            val current = dao.querySubsItemConfig(listOf(subsId)).find { it.appId == appId }
+            if (enabled == null) current?.let { dao.delete(it) }
+            else if (current?.enable != enabled) dao.upsert(SubsAppConfig(enabled, subsId, appId))
+        }
 
     suspend fun updateAppGroupConfig(
         subsId: Long,
@@ -48,15 +52,23 @@ class SubscriptionConfigStore(private val database: AppDb) {
         val current = dao.getConfig(subsId, groupKey)
         val next = transform(current ?: SubsGlobalGroupConfig(subsId, groupKey))
         require(next.subsId == subsId && next.groupKey == groupKey)
-        if (next.enable == null && next.exclude.isEmpty()) {
+        if (next.enable == null && next.exclude.isEmpty() && next.matchAnyApp == null) {
             if (current != null) dao.delete(current)
         } else if (next != current) dao.upsert(next)
         next
     }
 
-    fun observe(): Flow<SubscriptionConfigSnapshot> = database.invalidationTracker.createFlow(
-        "subs_item", "subs_app_config", "subs_category_config", "subs_app_group_config", "subs_global_group_config",
-    ).map { capture() }.distinctUntilChanged()
+    fun observe(): Flow<SubscriptionConfigSnapshot> =
+        database.invalidationTracker
+            .createFlow(
+                "subs_item",
+                "subs_app_config",
+                "subs_category_config",
+                "subs_app_group_config",
+                "subs_global_group_config",
+            )
+            .map { capture() }
+            .distinctUntilChanged()
 
     suspend fun capture(): SubscriptionConfigSnapshot = database.withReadTransaction {
         SubscriptionConfigSnapshot(
@@ -90,35 +102,43 @@ class SubscriptionConfigStore(private val database: AppDb) {
 
     suspend fun restore(snapshot: SubscriptionConfigSnapshot) = database.withWriteTransaction {
         val appConfigKeys = snapshot.appConfigs.mapTo(mutableSetOf()) { it.subsId to it.appId }
-        val removedAppConfigs = database.subsAppConfigDao().queryAll().filter {
-            (it.subsId to it.appId) !in appConfigKeys
-        }
+        val removedAppConfigs =
+            database.subsAppConfigDao().queryAll().filter {
+                (it.subsId to it.appId) !in appConfigKeys
+            }
         database.subsAppConfigDao().delete(*removedAppConfigs.toTypedArray())
-        val categoryConfigKeys = snapshot.categoryConfigs.mapTo(mutableSetOf()) {
-            it.subsId to it.categoryKey
-        }
-        val removedCategoryConfigs = database.subsCategoryConfigDao().queryAll().filter {
-            (it.subsId to it.categoryKey) !in categoryConfigKeys
-        }
+        val categoryConfigKeys =
+            snapshot.categoryConfigs.mapTo(mutableSetOf()) {
+                it.subsId to it.categoryKey
+            }
+        val removedCategoryConfigs =
+            database.subsCategoryConfigDao().queryAll().filter {
+                (it.subsId to it.categoryKey) !in categoryConfigKeys
+            }
         database.subsCategoryConfigDao().delete(*removedCategoryConfigs.toTypedArray())
-        val appGroupConfigKeys = snapshot.appGroupConfigs.mapTo(mutableSetOf()) {
-            Triple(it.subsId, it.appId, it.groupKey)
-        }
-        val removedAppGroupConfigs = database.subsAppGroupConfigDao().queryAll().filter {
-            Triple(it.subsId, it.appId, it.groupKey) !in appGroupConfigKeys
-        }
+        val appGroupConfigKeys =
+            snapshot.appGroupConfigs.mapTo(mutableSetOf()) {
+                Triple(it.subsId, it.appId, it.groupKey)
+            }
+        val removedAppGroupConfigs =
+            database.subsAppGroupConfigDao().queryAll().filter {
+                Triple(it.subsId, it.appId, it.groupKey) !in appGroupConfigKeys
+            }
         database.subsAppGroupConfigDao().delete(*removedAppGroupConfigs.toTypedArray())
-        val globalGroupConfigKeys = snapshot.globalGroupConfigs.mapTo(mutableSetOf()) {
-            it.subsId to it.groupKey
-        }
-        val removedGlobalGroupConfigs = database.subsGlobalGroupConfigDao().queryAll().filter {
-            (it.subsId to it.groupKey) !in globalGroupConfigKeys
-        }
+        val globalGroupConfigKeys =
+            snapshot.globalGroupConfigs.mapTo(mutableSetOf()) {
+                it.subsId to it.groupKey
+            }
+        val removedGlobalGroupConfigs =
+            database.subsGlobalGroupConfigDao().queryAll().filter {
+                (it.subsId to it.groupKey) !in globalGroupConfigKeys
+            }
         database.subsGlobalGroupConfigDao().delete(*removedGlobalGroupConfigs.toTypedArray())
         val subsItemIds = snapshot.subsItems.mapTo(mutableSetOf()) { it.id }
-        val removedSubsItems = database.subsItemDao().queryAll().filter {
-            it.id !in subsItemIds
-        }
+        val removedSubsItems =
+            database.subsItemDao().queryAll().filter {
+                it.id !in subsItemIds
+            }
         database.subsItemDao().delete(*removedSubsItems.toTypedArray())
         database.subsItemDao().upsert(*snapshot.subsItems.toTypedArray())
         database.subsAppConfigDao().upsert(*snapshot.appConfigs.toTypedArray())

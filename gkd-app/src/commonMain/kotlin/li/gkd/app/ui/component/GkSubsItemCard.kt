@@ -1,0 +1,326 @@
+package li.gkd.app.ui.component
+
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import li.gkd.app.resources.*
+import li.gkd.db.SubscriptionIds
+import org.jetbrains.compose.resources.stringResource
+
+data class SubscriptionCardData(
+    val id: Long,
+    val enabled: Boolean,
+    val name: String?,
+    val version: Int = 0,
+    val author: String? = null,
+    val globalGroups: Int = 0,
+    val apps: Int = 0,
+    val appGroups: Int = 0,
+    val updatedAt: String,
+    val appName: String,
+    val loadError: String? = null,
+    val updateFailed: Boolean = false,
+    val triggerCount: Long = 0,
+)
+
+@Composable
+fun GkSubsItemCard(
+    modifier: Modifier = Modifier,
+    interactionSource: MutableInteractionSource,
+    data: SubscriptionCardData,
+    matchingEnabled: Boolean,
+    index: Int,
+    isSelectedMode: Boolean,
+    isSelected: Boolean,
+    selectionEnabled: Boolean = true,
+    handlesLongPress: Boolean = true,
+    onSelect: () -> Unit,
+    refreshing: Boolean,
+    onOpen: () -> Unit,
+    onCheckedChange: ((Boolean) -> Unit),
+    onSelectedChange: (() -> Unit)? = null,
+) {
+    val selectedLabel = stringResource(Res.string.selected)
+    val notSelectedLabel = stringResource(Res.string.not_selected)
+    val pausedLabel = stringResource(Res.string.subscription_switch_paused_description)
+    val enabledLabel = stringResource(Res.string.enabled)
+    val disabledLabel = stringResource(Res.string.disabled)
+    val deselectLabel = stringResource(Res.string.selection_deselect)
+    val selectLabel = stringResource(Res.string.selection_select)
+    val detailsLabel = stringResource(Res.string.subscription_details_view)
+    val selectionModeLabel = stringResource(Res.string.selection_mode_enter)
+    val authorLabel = stringResource(Res.string.author_description, data.author.orEmpty())
+    val versionLabel = stringResource(Res.string.subscription_version_description, data.version)
+    val updatedLabel = stringResource(Res.string.update_time_description, data.updatedAt)
+    val orderLabel =
+        stringResource(Res.string.subscription_order_description, index, data.name.orEmpty())
+    val dragged by interactionSource.collectIsDraggedAsState()
+    val onClick = {
+        if (!dragged) {
+            if (isSelectedMode) {
+                if (selectionEnabled) onSelectedChange?.invoke()
+            } else if (!refreshing) {
+                onOpen()
+            }
+        }
+    }
+    val containerColor =
+        animateColorAsState(
+            if (isSelected) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainer
+            },
+            tween(),
+        )
+    Card(
+        modifier =
+            modifier
+                .padding(16.dp, 4.dp)
+                .clip(MaterialTheme.shapes.small)
+                .combinedClickable(
+                    interactionSource = interactionSource,
+                    indication = LocalIndication.current,
+                    enabled = !isSelectedMode || selectionEnabled,
+                    onClick = onClick,
+                    onLongClick = if (handlesLongPress && selectionEnabled) onSelect else null,
+                )
+                .semantics {
+                    stateDescription =
+                        if (isSelectedMode) {
+                            if (isSelected) selectedLabel else notSelectedLabel
+                        } else if (!matchingEnabled) {
+                            pausedLabel
+                        } else {
+                            if (data.enabled) enabledLabel else disabledLabel
+                        }
+                    if (isSelectedMode) {
+                        selected = isSelected
+                        role = Role.Checkbox
+                    }
+                    this.onClick(
+                        label =
+                            if (isSelectedMode) {
+                                if (isSelected) deselectLabel else selectLabel
+                            } else detailsLabel,
+                        action = null,
+                    )
+                    if (selectionEnabled) {
+                        this.onLongClick(
+                            label = if (isSelectedMode) selectLabel else selectionModeLabel,
+                        ) {
+                            onSelect()
+                            true
+                        }
+                    }
+                },
+        shape = MaterialTheme.shapes.small,
+        colors =
+            CardDefaults.cardColors(
+                containerColor = containerColor.value,
+            ),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(8.dp),
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (data.name != null) {
+                    Text(
+                        modifier =
+                            Modifier.semantics {
+                                contentDescription = orderLabel
+                            },
+                        text =
+                            stringResource(
+                                Res.string.subscription_numbered_name,
+                                index,
+                                data.name.orEmpty(),
+                            ),
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    GkRuleStats(
+                        GkRuleStatsData(
+                            globalGroups = data.globalGroups,
+                            apps = data.apps,
+                            appGroups = data.appGroups,
+                        ),
+                        triggerCount = data.triggerCount,
+                    )
+                    SubsStatusLine(data) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            if (!SubscriptionIds.isLocal(data.id)) {
+                                if (data.author != null) {
+                                    Text(
+                                        modifier =
+                                            Modifier.weight(1f, fill = false).semantics {
+                                                contentDescription = authorLabel
+                                            },
+                                        text = data.author,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
+                                Text(
+                                    modifier =
+                                        Modifier.semantics {
+                                            contentDescription = versionLabel
+                                        },
+                                    text =
+                                        stringResource(Res.string.version_prefixed, data.version),
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            } else {
+                                Text(
+                                    modifier =
+                                        Modifier.weight(1f, fill = false).clearAndSetSemantics {},
+                                    text = data.appName,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.secondary,
+                                )
+                            }
+                            val timeStr = data.updatedAt
+                            Text(
+                                modifier =
+                                    Modifier.semantics {
+                                        contentDescription = updatedLabel
+                                    },
+                                text = timeStr,
+                                maxLines = 1,
+                                softWrap = false,
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        text = stringResource(Res.string.subscription_id_description, data.id),
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    val color =
+                        if (data.loadError != null) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            Color.Unspecified
+                        }
+                    SubsStatusLine(data) {
+                        if (data.loadError == null && refreshing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Text(
+                                text = data.loadError ?: stringResource(Res.string.file_missing),
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = color,
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.width(4.dp))
+            if (isSelectedMode) {
+                GkCheckbox(
+                    checked = isSelected,
+                    onCheckedChange = null,
+                    enabled = selectionEnabled,
+                    modifier = Modifier.minimumInteractiveComponentSize(),
+                )
+            } else {
+                GkSwitch(
+                    key = data.id,
+                    checked = matchingEnabled && data.enabled,
+                    enabled = matchingEnabled,
+                    onCheckedChange = onCheckedChange,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SubsStatusLine(data: SubscriptionCardData, content: @Composable () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.weight(1f)) {
+            content()
+        }
+        Spacer(Modifier.width(4.dp))
+        Box(Modifier.size(16.dp)) {
+            if (data.loadError != null || data.updateFailed) {
+                val description =
+                    listOfNotNull(
+                            if (data.loadError != null)
+                                stringResource(Res.string.subscription_load_failed)
+                            else null,
+                            if (data.updateFailed)
+                                stringResource(Res.string.subscription_update_failed)
+                            else null,
+                        )
+                        .joinToString(", ")
+                GkIcon(
+                    imageVector =
+                        if (data.loadError != null) GkIcons.WarningAmber else GkIcons.SyncProblem,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.error,
+                    contentDescription = description,
+                )
+            }
+        }
+    }
+}

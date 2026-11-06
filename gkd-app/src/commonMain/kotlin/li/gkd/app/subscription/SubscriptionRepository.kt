@@ -1,0 +1,808 @@
+package li.gkd.app.subscription
+
+import io.ktor.client.plugins.expectSuccess
+import io.ktor.client.request.get
+import io.ktor.client.statement.bodyAsText
+import java.net.URI
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
+import li.gkd.app.logging.LogUtils
+import li.gkd.app.logging.logText
+import li.gkd.app.network.NetworkClients
+import li.gkd.app.network.isNetworkRequestAllowed
+import li.gkd.app.network.logNetworkFailure
+import li.gkd.app.settings.SettingsRepository
+import li.gkd.app.state.Loadable
+import li.gkd.app.state.MutexState
+import li.gkd.app.storage.appStorage
+import li.gkd.db.Db
+import li.gkd.db.SubsItem
+import li.gkd.db.SubscriptionConfigStore
+import li.gkd.db.SubscriptionIds
+import li.songe.codeorigin.CallSite
+import li.songe.json5.Json5ParseException
+import li.songe.json5.decodeFromJson5String
+
+object SubscriptionRepository {
+    val files by lazy { FileSubscriptionFiles(appStorage().subscription) }
+
+    private val updateMutex = MutexState()
+
+    val snapshotFlow: StateFlow<Loadable<SubscriptionSnapshot>>
+        field = MutableStateFlow<Loadable<SubscriptionSnapshot>>(Loadable.Loading)
+    val refreshing: StateFlow<Boolean>
+        field = MutableStateFlow(false)
+
+    val updating
+        get() = updateMutex.state
+
+    val isBusy: Boolean
+        get() = updating.value
+
+    suspend fun existingUpdateUrls(): Set<String> =
+        Db.subsItemDao.queryAll().mapNotNullTo(mutableSetOf()) { it.updateUrl }
+
+    suspend fun initialize(defaults: SubscriptionDefaults) =
+        withContext(Dispatchers.IO) {
+            updateMutex.withStateLock {
+                snapshotFlow.value = Loadable.Loading
+                try {
+                    refreshRawSubscriptions(
+                        items = Db.subsItemDao.queryAll(),
+                        previous = SubscriptionSnapshot(),
+                        creationDefaults = defaults,
+                    )
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    snapshotFlow.value = Loadable.Failure(e)
+                    throw e
+                }
+            }
+            ensureLocalSubscription(defaults.localName)
+        }
+
+    private suspend fun ensureLocalSubscription(initialName: String) =
+        withContext(Dispatchers.IO) {
+            updateMutex.withStateLock {
+                try {
+                    val items = Db.subsItemDao.queryAll()
+                    if (snapshotFlow.value !is Loadable.Ready) {
+                        refreshRawSubscriptions(
+                            items = items,
+                            previous = SubscriptionSnapshot(),
+                        )
+                    }
+                    if (items.any { it.id == SubscriptionIds.LOCAL }) return@withStateLock
+                    val item =
+                        SubsItem(
+                            id = SubscriptionIds.LOCAL,
+                            order = items.minByOrNull { it.order }?.order ?: 0,
+                        )
+                    if (files.readBytes(SubscriptionIds.LOCAL) != null) {
+                        Db.subsItemDao.upsert(item)
+                        refreshRawSubscriptions(listOf(item))
+                    } else {
+                        saveLocked(
+                            subscription =
+                                RawSubscription(
+                                    id = SubscriptionIds.LOCAL,
+                                    name = initialName,
+                                    version = 0,
+                                ),
+                            newItem = item,
+                            insertItem = true,
+                        )
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (snapshotFlow.value !is Loadable.Ready) {
+                        snapshotFlow.value = Loadable.Failure(e)
+                    }
+                    throw e
+                }
+            }
+        }
+
+    suspend fun awaitSnapshot(): SubscriptionSnapshot {
+        return when (val state = snapshotFlow.first { it !is Loadable.Loading }) {
+            Loadable.Loading ->
+                throw SubscriptionException(SubscriptionFailureReason.SubscriptionNotLoaded)
+            is Loadable.Failure -> throw state.cause
+            is Loadable.Ready -> state.value
+        }
+    }
+
+    suspend fun captureBackup(): SubscriptionBackupSnapshot =
+        withContext(Dispatchers.IO) {
+            // Initialization needs this same lock; wait for it before acquiring the lock.
+            awaitSnapshot()
+            updateMutex.withStateLock {
+                SubscriptionBackupSnapshot(
+                    configuration = SubscriptionConfigStore.capture(),
+                    subscriptions = awaitSnapshot().subscriptions.values.toList(),
+                )
+            }
+        }
+
+    /**
+     * Keeps backup file changes and compensation exclusive with subscription updates. The block
+     * owns the database transaction and uses SubscriptionPersistence directly.
+     */
+    suspend fun <T> withBackupTransaction(
+        subscriptions: List<RawSubscription>,
+        block: suspend (List<RawSubscription>) -> T,
+    ): T =
+        withContext(Dispatchers.IO) {
+            updateMutex.withStateLock {
+                val previous =
+                    snapshotFlow.value.value ?: refreshRawSubscriptions(Db.subsItemDao.queryAll())
+                val prepared = subscriptions.map { prepareSubscription(it, previous) }
+                // Waiting for an in-flight refresh remains cancellable; an accepted restore
+                // completes.
+                withContext(NonCancellable) {
+                    try {
+                        val result = block(prepared)
+                        refreshRawSubscriptions(
+                            items = Db.subsItemDao.queryAll(),
+                            previous = SubscriptionSnapshot(),
+                        )
+                        result
+                    } catch (error: Throwable) {
+                        // Compensation can itself fail: publish what is actually readable from
+                        // disk.
+                        runCatching {
+                                refreshRawSubscriptions(
+                                    items = Db.subsItemDao.queryAll(),
+                                    previous = SubscriptionSnapshot(),
+                                )
+                            }
+                            .exceptionOrNull()
+                            ?.let(error::addSuppressed)
+                        throw error
+                    }
+                }
+            }
+        }
+
+    /** Returns false when enabling requires the user's power warning confirmation. */
+    suspend fun requestEnabled(id: Long, enabled: Boolean, confirmed: Boolean = false): Boolean =
+        updateMutex.withStateLock {
+            val items = Db.subsItemDao.queryAll()
+            val item =
+                items.firstOrNull { it.id == id }
+                    ?: throw SubscriptionException(
+                        SubscriptionFailureReason.SubscriptionMissingId,
+                        listOf(id.toString()),
+                    )
+            if (
+                enabled &&
+                    !confirmed &&
+                    SettingsRepository.settings.value.subsPowerWarn &&
+                    !item.isLocal
+            ) {
+                val subscriptions = snapshotFlow.value.value?.subscriptions.orEmpty()
+                if (
+                    items.any {
+                        it.id != id &&
+                            it.enable &&
+                            !it.isLocal &&
+                            subscriptions[it.id]?.hasRule != false
+                    }
+                ) {
+                    return@withStateLock false
+                }
+            }
+            Db.subsItemDao.updateEnable(id, enabled)
+            true
+        }
+
+    suspend fun saveWithItem(
+        subscription: RawSubscription,
+        defaultItem: SubsItem,
+    ) =
+        withContext(Dispatchers.IO) {
+            require(subscription.id == defaultItem.id) {
+                throw SubscriptionException(
+                    SubscriptionFailureReason.SubscriptionItemIdMismatch,
+                    listOf(subscription.id.toString(), defaultItem.id.toString()),
+                )
+            }
+            updateMutex.withStateLock {
+                val currentItem = Db.subsItemDao.queryAll().find { it.id == subscription.id }
+                saveLocked(
+                    subscription = subscription,
+                    newItem = currentItem ?: defaultItem,
+                    insertItem = currentItem == null,
+                )
+            }
+        }
+
+    // Configuration commands share the subscription lock so an update cannot change
+    // category membership between validating the displayed snapshot and writing.
+    suspend fun <T> withSubscriptionSnapshot(
+        expected: RawSubscription,
+        action: suspend (RawSubscription) -> T,
+    ): T = withSubscriptionSnapshots(listOf(expected)) { action(expected) }
+
+    suspend fun <T> withSubscription(
+        id: Long,
+        action: suspend (RawSubscription) -> T,
+    ): T = updateMutex.withStateLock { action(requireSubscription(id)) }
+
+    suspend fun <T> withSubscriptionSnapshots(
+        expected: Collection<RawSubscription>,
+        action: suspend () -> T,
+    ): T = updateMutex.withStateLock {
+        expected.forEach { subscription ->
+            val current =
+                requireSnapshot(subscription.id).subscriptions[subscription.id]
+                    ?: throw SubscriptionException(SubscriptionFailureReason.SubscriptionMissing)
+            check(current == subscription) {
+                throw SubscriptionException(SubscriptionFailureReason.SubscriptionContentConflict)
+            }
+        }
+        action()
+    }
+
+    suspend fun saveCategory(
+        expected: RawSubscription,
+        categoryKey: Int?,
+        name: String,
+        description: String,
+    ): SubscriptionEditResult<Boolean> =
+        editSubscription(expected.id) { current ->
+            if (current != expected) {
+                SubscriptionEditResult.Rejected(
+                    SubscriptionFailureReason.SubscriptionPreviewConflict,
+                )
+            } else {
+                CategoryPolicy.previewEdit(current, categoryKey, name, description)
+            }
+        }
+
+    suspend fun deleteCategory(expected: RawSubscription, categoryKey: Int): Boolean =
+        deleteCategories(expected, setOf(categoryKey))
+
+    suspend fun deleteCategories(expected: RawSubscription, categoryKeys: Set<Int>): Boolean =
+        update(expected.id) { current ->
+            require(current.isLocal) {
+                throw SubscriptionException(
+                    SubscriptionFailureReason.RemoteCategoryDeleteUnsupported,
+                )
+            }
+            check(current == expected) {
+                throw SubscriptionException(SubscriptionFailureReason.SubscriptionContentConflict)
+            }
+            current.edit {
+                categoryKeys.forEach { categoryKey ->
+                    check(removeCategory(categoryKey) != null) {
+                        throw SubscriptionException(SubscriptionFailureReason.CategoryMissing)
+                    }
+                }
+            }
+        }
+
+    suspend fun update(
+        id: Long,
+        transform: (RawSubscription) -> RawSubscription,
+    ): Boolean =
+        withContext(Dispatchers.IO) {
+            var changed = false
+            updateMutex.withStateLock {
+                val current = requireSubscription(id)
+                val next = transform(current)
+                require(next.id == id) {
+                    throw SubscriptionException(
+                        SubscriptionFailureReason.SubscriptionIdImmutable,
+                        listOf(id.toString(), next.id.toString()),
+                    )
+                }
+                if (next == current) return@withStateLock
+                saveLocked(next)
+                changed = true
+            }
+            changed
+        }
+
+    suspend fun editSubscription(
+        id: Long,
+        transform: (RawSubscription) -> SubscriptionEditResult<RawSubscription>,
+    ): SubscriptionEditResult<Boolean> =
+        withContext(Dispatchers.IO) {
+            updateMutex.withStateLock {
+                val snapshot =
+                    when (val state = snapshotFlow.value) {
+                        Loadable.Loading ->
+                            return@withStateLock SubscriptionEditResult.Rejected(
+                                SubscriptionFailureReason.SubscriptionNotLoadedId,
+                                listOf(id.toString()),
+                            )
+                        is Loadable.Failure -> throw state.cause
+                        is Loadable.Ready -> state.value
+                    }
+                val current =
+                    snapshot.subscriptions[id]
+                        ?: run {
+                            snapshot.loadErrors[id]?.let { throw it }
+                            return@withStateLock SubscriptionEditResult.Rejected(
+                                SubscriptionFailureReason.SubscriptionMissingId,
+                                listOf(id.toString()),
+                            )
+                        }
+                when (val result = transform(current)) {
+                    is SubscriptionEditResult.Rejected -> result
+                    is SubscriptionEditResult.Success -> {
+                        val next = result.value
+                        require(next.id == id)
+                        val changed = next != current
+                        if (changed) saveLocked(next)
+                        SubscriptionEditResult.Success(changed)
+                    }
+                }
+            }
+        }
+
+    suspend fun delete(vararg subscriptionIds: Long): SubscriptionResult =
+        withContext(Dispatchers.IO) {
+            if (subscriptionIds.isEmpty()) return@withContext SubscriptionResult.Success()
+            var result: SubscriptionResult = SubscriptionResult.Busy
+            updateMutex.withStateLock {
+                val deletion =
+                    try {
+                        SubscriptionPersistence.delete(subscriptionIds)
+                    } catch (e: SubscriptionPersistence.DeleteException) {
+                        LogUtils.e("Subscription deletion failed", e)
+                        result =
+                            SubscriptionResult.Failure(
+                                reason =
+                                    when (e.stage) {
+                                        SubscriptionPersistence.DeleteStage.File ->
+                                            SubscriptionResult.FailureReason.DeleteFile
+
+                                        SubscriptionPersistence.DeleteStage.Database ->
+                                            SubscriptionResult.FailureReason.DeleteData
+                                    },
+                                cause = e,
+                            )
+                        return@withStateLock
+                    }
+                if (deletion.count == 0) {
+                    result = SubscriptionResult.Success()
+                    return@withStateLock
+                }
+                val snapshot = snapshotFlow.value.value
+                if (snapshot != null) {
+                    snapshotFlow.value =
+                        Loadable.Ready(
+                            snapshot.copy(
+                                subscriptions = snapshot.subscriptions - deletion.ids,
+                                loadErrors = snapshot.loadErrors - deletion.ids,
+                                updateErrors = snapshot.updateErrors - deletion.ids,
+                            ),
+                        )
+                }
+                LogUtils.i("deleteSubscription", deletion.ids)
+                result =
+                    SubscriptionResult.Success(
+                        kind = SubscriptionResult.SuccessKind.Deleted,
+                        count = deletion.count,
+                    )
+            }
+            result
+        }
+
+    suspend fun addOrModifyRemote(
+        url: String,
+        id: Long? = null,
+        onStage: suspend (SubscriptionAddStage) -> Unit = {},
+    ): SubscriptionResult =
+        withContext(Dispatchers.IO) {
+            var result: SubscriptionResult = SubscriptionResult.Busy
+            val acquired = updateMutex.tryWithStateLock {
+                val items = Db.subsItemDao.queryAll()
+                if (items.any { it.updateUrl == url && it.id != id }) {
+                    result =
+                        SubscriptionResult.Failure(SubscriptionResult.FailureReason.DuplicateUrl)
+                    return@tryWithStateLock
+                }
+                if (id != null) {
+                    val item = items.first { it.id == id }
+                    Db.subsItemDao.update(item.copy(updateUrl = url))
+                    result = SubscriptionResult.Success(SubscriptionResult.SuccessKind.Modified)
+                    return@tryWithStateLock
+                }
+                onStage(SubscriptionAddStage.Downloading)
+                val subscription =
+                    try {
+                        fetchRemoteSubscription(
+                            url,
+                            "Subscription add failed",
+                            onParsing = { onStage(SubscriptionAddStage.Parsing) },
+                        ) {
+                            RawSubscriptionParser.parse(it)
+                        }
+                    } catch (e: SubscriptionException) {
+                        val reason =
+                            when (e.reason) {
+                                SubscriptionFailureReason.SubscriptionUpdateUrlRequestFailed ->
+                                    SubscriptionResult.FailureReason.Download
+                                SubscriptionFailureReason.TextParseFailed ->
+                                    SubscriptionResult.FailureReason.Parse
+                                else -> throw e
+                            }
+                        result = SubscriptionResult.Failure(reason = reason, cause = e.cause)
+                        return@tryWithStateLock
+                    }
+                onStage(SubscriptionAddStage.Checking)
+                if (items.any { it.id == subscription.id }) {
+                    result =
+                        SubscriptionResult.Failure(SubscriptionResult.FailureReason.AlreadyExists)
+                    return@tryWithStateLock
+                }
+                if (!SubscriptionIds.isRemote(subscription.id)) {
+                    result =
+                        SubscriptionResult.Failure(
+                            reason = SubscriptionResult.FailureReason.InvalidId,
+                            detail = subscription.id.toString(),
+                        )
+                    return@tryWithStateLock
+                }
+                val newItem =
+                    SubsItem(
+                        id = subscription.id,
+                        updateUrl = url,
+                        order = if (items.isEmpty()) 1 else items.maxOf { it.order } + 1,
+                    )
+                onStage(SubscriptionAddStage.Saving)
+                try {
+                    withContext(NonCancellable) {
+                        saveLocked(subscription, newItem, insertItem = true)
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    LogUtils.e("Subscription save failed", e)
+                    result =
+                        SubscriptionResult.Failure(
+                            reason = SubscriptionResult.FailureReason.Save,
+                            cause = e,
+                        )
+                    return@tryWithStateLock
+                }
+                result = SubscriptionResult.Success(SubscriptionResult.SuccessKind.Added)
+            }
+            if (!acquired) return@withContext SubscriptionResult.Busy
+            result
+        }
+
+    suspend fun refresh(id: Long? = null): SubscriptionResult =
+        withContext(Dispatchers.IO) {
+            if (snapshotFlow.value is Loadable.Loading) {
+                return@withContext SubscriptionResult.Busy
+            }
+            var result: SubscriptionResult = SubscriptionResult.Busy
+            val acquired = updateMutex.tryWithStateLock {
+                refreshing.value = true
+                try {
+                    val items =
+                        try {
+                            Db.subsItemDao.queryAll().filter { id == null || it.id == id }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            if (snapshotFlow.value !is Loadable.Ready) {
+                                snapshotFlow.value = Loadable.Failure(e)
+                            }
+                            throw e
+                        }
+                    val currentSnapshot = snapshotFlow.value.value
+                    val missingItems =
+                        if (currentSnapshot == null) {
+                            items
+                        } else {
+                            items.filter { item -> item.id !in currentSnapshot.subscriptions }
+                        }
+                    val snapshot =
+                        refreshRawSubscriptions(
+                            items = missingItems,
+                            previous = currentSnapshot ?: SubscriptionSnapshot(),
+                        )
+                    val entries = items.map { item ->
+                        UpdateEntry(item, snapshot.subscriptions[item.id])
+                    }
+                    if (entries.any { !it.subsItem.isLocal } && !isNetworkRequestAllowed()) {
+                        result =
+                            SubscriptionResult.Failure(
+                                SubscriptionResult.FailureReason.NetworkUnavailable,
+                            )
+                        return@tryWithStateLock
+                    }
+                    LogUtils.i("开始检测更新")
+                    var successCount = 0
+                    entries
+                        .filter { !it.subsItem.isLocal }
+                        .forEach { entry ->
+                            try {
+                                val subscription = fetchUpdate(entry)
+                                if (subscription != null) {
+                                    saveLocked(subscription)
+                                    successCount++
+                                } else {
+                                    clearUpdateError(entry.subsItem.id)
+                                }
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                setUpdateError(entry.subsItem.id, e)
+                                val operation =
+                                    "Subscription update failed subsId=${entry.subsItem.id}"
+                                val failure = e as? SubscriptionException
+                                when (failure?.reason) {
+                                    SubscriptionFailureReason.SubscriptionUpdateUrlRequestFailed,
+                                    SubscriptionFailureReason.TextParseFailed -> Unit
+                                    SubscriptionFailureReason.SubscriptionUpdatedIdMismatch ->
+                                        LogUtils.w(
+                                            "$operation: ${failure.reason} ${failure.arguments}",
+                                        )
+                                    else -> LogUtils.e(operation, e)
+                                }
+                            }
+                        }
+                    result =
+                        SubscriptionResult.Success(
+                            kind = SubscriptionResult.SuccessKind.Refreshed,
+                            count = successCount,
+                        )
+                    LogUtils.i("结束检测更新")
+                } finally {
+                    refreshing.value = false
+                }
+            }
+            if (!acquired) return@withContext SubscriptionResult.Busy
+            result
+        }
+
+    private suspend fun saveLocked(
+        subscription: RawSubscription,
+        newItem: SubsItem? = null,
+        insertItem: Boolean = false,
+    ) {
+        val id = subscription.id
+        val snapshot =
+            snapshotFlow.value.value
+                ?: refreshRawSubscriptions(
+                    items = Db.subsItemDao.queryAll(),
+                    previous = SubscriptionSnapshot(),
+                )
+        val nextSubscription = prepareSubscription(subscription, snapshot)
+        SubscriptionPersistence.save(nextSubscription, newItem, insertItem)
+        snapshotFlow.value =
+            Loadable.Ready(
+                snapshot.copy(
+                    subscriptions =
+                        snapshot.subscriptions.toMutableMap().apply {
+                            set(id, nextSubscription)
+                        },
+                    loadErrors = snapshot.loadErrors.toMutableMap().apply { remove(id) },
+                    updateErrors = snapshot.updateErrors.toMutableMap().apply { remove(id) },
+                ),
+            )
+        LogUtils.i("更新订阅文件:id=$id,name=${nextSubscription.name}")
+    }
+
+    private fun prepareSubscription(
+        subscription: RawSubscription,
+        snapshot: SubscriptionSnapshot,
+    ): RawSubscription =
+        if (
+            SubscriptionIds.isLocal(subscription.id) &&
+                snapshot.subscriptions[subscription.id]?.version == subscription.version
+        ) {
+            subscription.copy(
+                version = subscription.version + 1,
+                apps =
+                    subscription.apps
+                        .filterIfNotAll { it.groups.isNotEmpty() }
+                        .distinctByIfAny { it.id },
+            )
+        } else {
+            subscription
+        }
+
+    private fun load(id: Long): RawSubscription {
+        return files.load(id)
+    }
+
+    private fun refreshRawSubscriptions(
+        items: List<SubsItem>,
+        previous: SubscriptionSnapshot = snapshotFlow.value.value ?: SubscriptionSnapshot(),
+        creationDefaults: SubscriptionDefaults? = null,
+    ): SubscriptionSnapshot {
+        val subscriptions = previous.subscriptions.toMutableMap()
+        val errors = previous.loadErrors.toMutableMap()
+        items.forEach { item ->
+            try {
+                // Only initialization may create absent built-in files. Existing bytes, including
+                // Android recovery files and user names, always take precedence over defaults.
+                val initialName =
+                    when (item.id) {
+                        SubscriptionIds.LOCAL -> creationDefaults?.localName
+                        SubscriptionIds.LOCAL_HTTP -> creationDefaults?.memoryName
+                        else -> null
+                    }
+                if (initialName != null && files.readBytes(item.id) == null) {
+                    files.write(RawSubscription(item.id, initialName, 0))
+                }
+                subscriptions[item.id] = load(item.id)
+                errors.remove(item.id)
+            } catch (e: Exception) {
+                errors[item.id] = e
+            }
+        }
+        val nextSnapshot =
+            previous.copy(
+                subscriptions = subscriptions,
+                loadErrors = errors,
+            )
+        snapshotFlow.value = Loadable.Ready(nextSnapshot)
+        return nextSnapshot
+    }
+
+    suspend fun dismissUpdateError(id: Long, error: Exception) {
+        updateMutex.withStateLock {
+            if (snapshotFlow.value.value?.updateErrors?.get(id) === error) {
+                clearUpdateError(id)
+            }
+        }
+    }
+
+    private fun clearUpdateError(id: Long) {
+        val snapshot = snapshotFlow.value.value ?: return
+        if (id !in snapshot.updateErrors) return
+        snapshotFlow.value =
+            Loadable.Ready(
+                snapshot.copy(
+                    updateErrors = snapshot.updateErrors.toMutableMap().apply { remove(id) },
+                ),
+            )
+    }
+
+    private fun setUpdateError(id: Long, error: Exception) {
+        val snapshot = snapshotFlow.value.value ?: return
+        snapshotFlow.value =
+            Loadable.Ready(
+                snapshot.copy(
+                    updateErrors = snapshot.updateErrors.toMutableMap().apply { set(id, error) },
+                ),
+            )
+    }
+
+    private fun requireSnapshot(id: Long): SubscriptionSnapshot {
+        return when (val state = snapshotFlow.value) {
+            Loadable.Loading ->
+                throw SubscriptionException(
+                    SubscriptionFailureReason.SubscriptionNotLoadedId,
+                    listOf(id.toString()),
+                )
+
+            is Loadable.Failure -> throw state.cause
+            is Loadable.Ready -> state.value
+        }
+    }
+
+    private fun requireSubscription(id: Long): RawSubscription {
+        val snapshot = requireSnapshot(id)
+        return snapshot.subscriptions[id]
+            ?: throw (snapshot.loadErrors[id]
+                ?: SubscriptionException(
+                    SubscriptionFailureReason.SubscriptionMissingId,
+                    listOf(id.toString()),
+                ))
+    }
+
+    private suspend fun fetchUpdate(entry: UpdateEntry): RawSubscription? {
+        val item = entry.subsItem
+        val current = entry.subscription
+        val itemUpdateUrl = item.updateUrl ?: return null
+        if (!SubscriptionIds.isRemote(item.id)) return null
+        val checkUrl =
+            current?.checkUpdateUrl?.let { check ->
+                runCatching { URI(itemUpdateUrl).resolve(check).toString() }.getOrNull()
+            }
+        if (checkUrl != null) {
+            val operation = "Subscription version check failed subsId=${item.id}"
+            try {
+                val version =
+                    fetchRemoteSubscription(checkUrl, operation) {
+                        SubscriptionJson.json.decodeFromJson5String<SubsVersion>(it)
+                    }
+                if (version.id == current.id && version.version <= current.version) return null
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: SubscriptionException) {
+                // A failed version check falls back to fetching the full subscription.
+            } catch (e: Exception) {
+                LogUtils.e(operation, e)
+            }
+        }
+        val subscription =
+            fetchRemoteSubscription(itemUpdateUrl, "Subscription update failed subsId=${item.id}") {
+                RawSubscriptionParser.parse(it)
+            }
+        if (subscription.id != item.id) {
+            throw SubscriptionException(
+                SubscriptionFailureReason.SubscriptionUpdatedIdMismatch,
+                listOf(subscription.id.toString(), item.id.toString()),
+            )
+        }
+        if (current != null && subscription.version <= current.version) {
+            LogUtils.i(
+                "Subscription version did not advance: ${item.id}",
+                "${current.version} -> ${subscription.version}",
+            )
+            return null
+        }
+        return subscription
+    }
+}
+
+private data class UpdateEntry(val subsItem: SubsItem, val subscription: RawSubscription?)
+
+private suspend fun <T> fetchRemoteSubscription(
+    url: String,
+    operation: String,
+    onParsing: suspend () -> Unit = {},
+    @CallSite loc: String = "",
+    parse: (String) -> T,
+): T {
+    val text =
+        try {
+            NetworkClients.client.get(url) { expectSuccess = true }.bodyAsText()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logNetworkFailure(operation, e, loc = loc)
+            throw SubscriptionException(
+                SubscriptionFailureReason.SubscriptionUpdateUrlRequestFailed,
+                cause = e,
+            )
+        }
+    onParsing()
+    return try {
+        parse(text)
+    } catch (e: Exception) {
+        val detail =
+            when (e) {
+                is SubscriptionParseException -> "path=${e.path} ${logText(e.detail)}"
+                is Json5ParseException,
+                is SerializationException -> "invalid response"
+                else -> throw e
+            }
+        LogUtils.w("$operation: $detail", loc = loc)
+        throw SubscriptionException(SubscriptionFailureReason.TextParseFailed, cause = e)
+    }
+}
+
+@Serializable private data class SubsVersion(val id: Long, val version: Int)
+
+private fun <T> List<T>.filterIfNotAll(predicate: (T) -> Boolean): List<T> =
+    if (all(predicate)) this else filter(predicate)
+
+private fun <T, K> List<T>.distinctByIfAny(selector: (T) -> K): List<T> =
+    distinctBy(selector).let { if (it.size == size) this else it }
+
+enum class SubscriptionAddStage {
+    Downloading,
+    Parsing,
+    Checking,
+    Saving,
+}

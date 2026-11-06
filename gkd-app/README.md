@@ -1,0 +1,205 @@
+# GKD Desktop 开发
+
+`gkd-app` 内置 Desktop 开发宿主，默认运行与 Android 共用的首页、订阅、应用、设置四标签及生产路由。平台不支持的具体动作显示 Toast；页面编辑与数据读写使用真实业务实现。模块、依赖和资源说明见 [应用架构](../docs/architecture.md)，目录布局见 [本地开发产物](../docs/local-development.md)，开发约束见 [AGENTS.md](../AGENTS.md)。
+
+## 启动与验证
+
+在仓库根目录运行：
+
+```powershell
+./gradlew.bat :gkd-app:run
+# 按正常窗口启动（焦点由系统决定）：
+./gradlew.bat :gkd-app:run --args=--focus
+# 会写入数据的交互检查使用隔离宿主：
+./gradlew.bat :gkd-app:run --args=--test
+# 使用正常窗口交互检查隔离宿主：
+./gradlew.bat :gkd-app:run --args="--test --focus"
+```
+
+日常启动使用已有开发数据，默认按正常窗口启动。`--focus` 仅绕过测试模式的后台窗口启动方式，焦点交给系统决定，不主动抢焦点或置顶；绿色版也支持此参数。`--test` 自动创建隔离会话，不读取日常 profile；无测试输入时使用最小模拟清单。测试窗口默认位于可视区域之外且不主动获取系统焦点；点击任务栏图标可手动聚焦，并将窗口移回屏幕内。后台弹窗不抢焦点，手动激活后弹窗可正常接收焦点。组合 `--test --focus` 时窗口直接显示在屏幕内并允许获取焦点，数据仍然隔离。控制窗口通过标题栏齿轮或 F12 打开，关闭它不会退出 App。
+
+Desktop 启动时自动开启唯一调试服务，监听 `0.0.0.0:<httpServerPort>`（默认 8888），支持本机和局域网 IPv4 访问。`/api/*` 为浏览器接口，`/debug/*` 为应用诊断，`/desktop/*` 为 JVM 宿主控制。实际端口写入当前会话 `debug-server.json`，改端口后更新，停止时删除。页面或 F12 控制窗口可关闭整个服务并重新开启，关闭期间所有 HTTP 接口均不可用。退出 App 时停止服务。修改 Kotlin 后先关闭本任务启动的 Desktop，再编译、重启，避免覆盖运行中的 JAR。
+
+按改动范围选择命令，不必每次全部执行：
+
+```powershell
+./gradlew.bat :gkd-app:compileKotlinJvm
+./gradlew.bat :gkd-app:jvmTest
+pnpm type-check
+pnpm test
+pnpm app-tools --help
+```
+
+共享逻辑、共享 UI 和 Desktop 修改只做相关 JVM 验证；涉及 Android 实现、依赖或构建链路时才执行相关 `gkd` 渠道验证。业务、持久化、协议和恢复行为保留自动测试；UI 默认使用人工或 HTTP 实际交互检查；仅为已发生、难以稳定人工复查的重要回归增加小范围自动测试，具体边界见 AGENTS.md。
+
+## Windows 绿色版打包
+
+在 Windows 上使用包含 `jpackage` 的 JDK 17 或更新版本，在仓库根目录执行：
+
+```powershell
+./gradlew.bat :gkd-app:packageWindowsPortable
+```
+
+ZIP 输出到 `.local/desktop-packages/gkd.win-<架构>.zip`。解压完整的 `GKD/` 目录后运行 `GKD.exe`，无需安装 Java，也不生成 MSI 或安装器。架构跟随构建所用 JDK，`amd64` / `x86_64` 统一命名为 `x86_64`；当前 WebView2 集成使用 Windows x64，建议使用 x64 JDK，网页功能仍需系统 WebView2 Runtime。
+
+设置非空环境变量或 Gradle 属性 `GKD_RENAME_PACKAGE_FLAG` 后，APK 命名为 `gkd-v<版本号><提交后缀>.apk`，ZIP 命名为 `gkd-v<版本号><提交后缀>.win-<架构>.zip`。HEAD 正好位于 Git tag 时无提交后缀，否则追加 `-<7位提交ID>`。例如：
+
+```powershell
+./gradlew.bat :gkd-app:packageWindowsPortable -PGKD_RENAME_PACKAGE_FLAG=1
+```
+
+打包复用 Compose 的 `createReleaseDistributable`，未压缩镜像位于 `gkd-app/build/compose/binaries/main-release/app/GKD/`。重新打包前关闭从该镜像启动的应用。ZIP 仅包含应用和运行时，不携带本机开发数据或设备资料。
+
+绿色版仅打包所需 Java 模块，并启用 ProGuard 删除未使用的应用代码、依赖和图标；关闭混淆及字节码优化，使用 Compose 默认裁剪规则，不整包保留应用代码。`collectDesktopConsumerRules` 自动读取 `jvmRuntimeClasspath` 中 JAR 的 `META-INF/proguard/*.pro`，按来源合并到 `build/generated/proguard/desktop-consumer-rules.pro`，作为 ProGuard 的任务输入。同名规则文件全部保留；依赖变化会重新收集，不读取 R8 专用目录。`desktop.pro` 只补充依赖未提供的 JNA 反射、ServiceLoader 入口及可选依赖声明。JVM 数据库显式使用生成的 `AppDbConstructor`，避免反射查找实现类。升级依赖后可运行 `:gkd-app:suggestModules` 复查静态模块需求，并用打包后的 `GKD.exe --test` 检查隔离启动、数据库、网络和网页；静态分析不能覆盖动态加载。
+
+绿色版数据、profile 和模拟配置保存在 `GKD.exe` 同目录的 `.local/desktop/`；`--test` 使用同目录的 `.local/tests/desktop/<会话ID>/`。可以整体移动目录，启动不依赖工作目录或源码仓库。请解压到可写目录；升级时保留已有 `.local/`。Gradle `run` 仍使用仓库根目录的 `.local/`。
+
+## 构建并安装真机 Debug / Release
+
+Debug 更新要求已安装并初始化 GKD Debug；Release 支持首次安装。在仓库根目录运行：
+
+```powershell
+# 构建一次，再顺序更新全部已连接且已授权的设备
+pnpm app-tools device-install
+# 只更新指定设备
+pnpm app-tools device-install --serial SERIAL
+# 构建并安装 gkd Release（也可加 --serial）
+pnpm app-tools device-install --release
+```
+
+命令位于 `scripts/desktop`，默认执行 `:gkd-android:assembleGkdDebug`；`--release` 执行 `:gkd-android:packageGkdRelease`（不上传构建产物），随后直接复用公共安装流程，不启动调试服务。省略 `--serial` 时跳过离线或未授权设备；单台更新失败会保留原因，继续其余设备，最后汇总失败。安装前暂停自动化，相同 APK 按 SHA-256 跳过，不同则覆盖更新；仅确认已核对身份的本次安装弹窗。每台设备结束时恢复并核对本次设置字段，GKD 本体不加入临时测试应用清理列表。Release 安装会暂停已存在的 Debug 和 Release 自动化；Release 恢复记录位于 `.local/device-recovery/release/`，失败后可运行 `pnpm app-tools device-recovery --serial SERIAL --operation restore --release`。此命令替代已删除的 `.local/install.ps1`。
+
+## 导入设备资料
+
+连接并解锁真机，构建带导出能力的调试包，再运行工具：
+
+```powershell
+./gradlew.bat :gkd-android:assembleGkdDebug
+pnpm app-tools capture-profile --install --screens
+./gradlew.bat :gkd-app:run
+```
+
+工具位于根目录 `scripts/desktop`，支持 `--serial`、`--apps`、`--install`、`--screens`、`--output`，不会自行构建 APK。省略 `--apps` 时使用设备导出的应用清单。
+
+工具先记录自动化开关和运行模式，关闭自动化并确认后导出，最后仅恢复这两个字段并核对。中断或断连后的恢复记录位于 `.local/device-recovery/`；重新连接后运行 `pnpm app-tools device-recovery --serial SERIAL --operation restore`，仅恢复本次两个字段。新采集会跨采集目录检查同一设备的待恢复记录。资料校验、暂存及真机恢复成功后才替换目标 profile，失败保留原资料。
+
+默认输出为日常 profile，包含设备尺寸、Insets、字体缩放、颜色、应用图标、订阅和初始设置。修改设备元数据后重启宿主，应用清单可在页面刷新。已有应用数据优先，重新导出不会清空数据库；profile 不复制数据库、规则统计或排序结果。字体和设备资料仅本地使用，不提交。
+
+如需直接调试导出协议，仅 debuggable App 接受：
+
+```powershell
+adb shell am start -n li.songe.gkd.debug/li.gkd.app.MainActivity -a li.gkd.action.EXPORT_DESKTOP_PROFILE --es requestId profile-example-1
+```
+
+每次使用新的 1–64 位字母、数字或连字符 requestId。外部 files 下的 `development/desktop-profile/<requestId>/status.json` 返回 running/success/failed 及失败原因，成功后拉取 `profile.zip`。导出等待实际窗口布局，串行执行；Activity 销毁会取消，相同 ID 不重复执行，超过一天的请求在下次导出时清理。ZIP 包含 `profile.json`、`apps.json`、`settings.json`、`seed.json`、`subscriptions/*.json` 和 `icons/*.png`；字体由工具单独拉取。资料格式变化后重新导出。
+
+## 模拟环境与数据
+
+控制窗口和 HTTP 操作同一个模拟器，配置自动保存；保存失败显示原因并提供重试，退出前须保存成功。模拟配置损坏或模型变更时可删除当前会话的 `simulator.json` 重置，不影响应用数据。路由、弹窗、IME 和进行中的任务不跨进程恢复。
+
+`GET /desktop/simulator` 读取配置，`POST /desktop/simulator` 替换配置，`POST /desktop/simulator/patch` 仅合并提供的字段。分组为 `device`、`permissions`、`services`、`prompts`、`privilege`。配置更新保留页面草稿；`POST /desktop/scenario` 重建页面及其 ViewModel/草稿，但保留持久化数据与模拟配置。
+
+`device.width/height` 是内容视口 dp，`density` 为相对系统 DPI 的倍率，`fontScale` 单独控制字体。`locale` 影响格式化，当前资源只有默认中文。系统栏实时绘制：时间取本机时钟，电量取 Windows 系统，网络和充电为模拟值。隐藏状态栏仍保留挖孔安全高度；隐藏导航栏移除底部系统留白。
+
+样本可放在当前会话 profile 的 `fixtures.json`，包含 `actionLogs`、`activityLogs`、`eventLogs`、`snapshots` 数组，字段对应 gkd-db 实体。快照图片放在同级 `snapshot/<id>/<id>.png` 或 `.webp`。使用稳定 id，首次成功导入后不重复导入；更换测试样本使用新的隔离会话。
+
+控制窗口“本地归档”提供备份导出、路径导入和日志导出，执行共享文件流程。文件选择及另存使用本机选择器；Android 系统分享等具体动作仍不支持。
+
+## HTTP 调试
+
+### 服务启动模拟
+
+生产页面的服务开关已接入 Desktop 生命周期管理，包括常驻通知、快照按钮、界面、事件、轨迹、截屏、HTTP、无障碍和自动化服务。HTTP 使用真实服务端，其他服务使用生命周期模拟。F12 控制窗口的“服务生命周期（模拟）”可配置成功、失败或手动完成，以及授权同意、取消或弹窗确认。截屏服务默认弹出模拟授权框；手动启动保持“启动中”，直到投递连接完成或失败事件。
+
+运行状态由 `SimulatorStore` 统一提供，页面重载不会停止服务；退出 Desktop 后不恢复运行状态。模拟条件会保存到会话 `simulator.json`。模拟不执行 Android 自动化、真实截屏或悬浮窗。调试服务复用 Android 的共享检查路由，实际监听 `0.0.0.0:<httpServerPort>`（默认 8888），支持本机和局域网 IPv4 访问，浏览器、应用诊断和桌面控制共用该监听。页面显示并可打开 `127.0.0.1` 及真实局域网 IPv4 地址，进入页面或切换调试服务时重新读取网卡地址；修改端口时重启监听，关闭时释放端口，并按“自动清空内存订阅”设置清理 HTTP 订阅。快照列表/文件读取、删除和订阅更新使用真实 Repository/DAO；`captureSnapshot`、`execSelector` 返回不支持，设备信息标识 Desktop。特权模拟断开会结束依赖它的自动化模拟。
+
+工具默认读取日常会话 `.local/desktop/debug-server.json`；隔离宿主请使用启动日志中的连接文件，下列示例显式使用隔离会话连接文件，请替换 `<会话>`；也可使用 `--port` 指定该实例的实际端口：
+
+```powershell
+$connection = ".local/tests/desktop/<会话>/debug-server.json"
+pnpm app-tools services --connection "$connection"
+# 检查运行中的真实订阅 HTTP 接口（仅 --test 宿主）：
+pnpm app-tools check-subscription-http --connection "$connection"
+# 在控制窗口将界面服务的启动结果设为“手动完成”后：
+pnpm app-tools service-start --service Activity --connection "$connection"
+# 将 1 替换为启动输出中的 runtime.Activity.attempt：
+pnpm app-tools service-event --service Activity --event Connected --attempt 1 --connection "$connection"
+pnpm app-tools service-stop --service Activity --connection "$connection"
+```
+
+`check-subscription-http` 启动真实调试服务，验证订阅读写、开关、解析错误和持久化结果，报告写入当前隔离会话的 `reports/subscription-http.json`。所有接口使用同一端口，工具通过 `--connection` 读取或通过 `--port` 显式指定。检查会更新内存订阅作为类别配置样本，并在成功后删除本次新增的正式订阅规则。
+
+`GET /desktop/services` 返回各服务的 `plans`、`runtime` 和 `[simulation]` 日志。`POST /desktop/services/command` 关闭 `Debug` 时先返回 HTTP 202，再关闭整个监听；重新开启需使用应用页面或 F12 控制窗口。其他命令接收 `{"service":"Activity","enabled":true}`；`POST /desktop/services/event` 接收 `service`、`type`、`attempt` 及可选 `reason`。HTTP 不接受模拟完成/故障事件，也不使用模拟启动结果，其状态由真实端口绑定结果决定。其他服务事件类型为 `Authorized`、`Cancelled`、`Connected`、`Failed`（启动失败或运行中异常终止），`attempt` 使用当前服务返回的编号，旧请求的完成事件会被忽略。
+
+模拟条件通过控制窗口或 `/desktop/simulator/patch` 设置，例如 `{"services":{"plans":{"Activity":{"startResult":"Manual"}}}}`。服务枚举为 `Status`、`Button`、`Activity`、`Event`、`Track`、`Screenshot`、`Debug`、`Accessibility`、`Automation`。`/desktop/simulator` 替换配置保留现有服务运行状态，`/desktop/simulator/patch` 不接受 `services.runtime/logs`；启停与故障使用服务命令/事件。验证页面按钮时仍通过 `/desktop/action` 操作真实控件。
+
+### 控件与数据接口
+
+所有写入检查先核对 `GET /desktop/state` 的 `isolated` 为 true。操作串行执行；节点失效时重新读取目标窗口控件树，只重试尚未执行的操作。
+
+| 方法与路径 | 用途 |
+| --- | --- |
+| `GET /health`、`GET /desktop/state` | 启动状态、场景与隔离标记 |
+| `GET /desktop/scenarios`、`POST /desktop/scenario` | 查询可用场景；打开页面或指定路由 |
+| `GET /desktop/simulator`、`POST /desktop/simulator`、`POST /desktop/simulator/patch` | 读取、替换或合并模拟配置 |
+| `GET /desktop/semantics`、`POST /desktop/action` | 读取实际控件树、执行实际控件操作 |
+| `GET /desktop/screenshot`、`GET /desktop/window` | 截图、窗口位置和尺寸 |
+| `GET /desktop/input-status` | 激活次数、可聚焦及已聚焦窗口数 |
+| `GET /desktop/app-catalog` | 生产仓库应用清单、刷新状态、错误及版本 |
+| `POST /desktop/runtime-records/replay` | 隔离宿主注入合成运行记录 |
+| `POST /desktop/snapshot-capture/replay` | 隔离宿主回放快照采集输入 |
+
+PowerShell 示例（`-NoProxy` 避免环回请求经过代理）：
+
+```powershell
+$connection = Get-Content -LiteralPath '.local/tests/desktop/<会话>/debug-server.json' | ConvertFrom-Json
+$api = "http://127.0.0.1:$($connection.port)"
+$state = Invoke-RestMethod -NoProxy "$api/desktop/state"
+if (-not $state.isolated) { throw '请使用 --test 隔离宿主' }
+Invoke-RestMethod -NoProxy "$api/desktop/scenario" -Method Post -ContentType 'application/json' `
+    -Body '{"page":"settings","variant":"normal"}'
+Invoke-RestMethod -NoProxy "$api/desktop/simulator/patch" -Method Post -ContentType 'application/json' `
+    -Body '{"device":{"width":412,"height":820,"density":1,"fontScale":1.5,"dark":true}}'
+Invoke-RestMethod -NoProxy "$api/desktop/semantics?window=app"
+```
+
+将截图保存到当前隔离会话的 `reports/`，请求为 `GET /desktop/screenshot?window=app`。控件树、截图和窗口查询显式指定 `window=app|controls`；操作请求在 JSON 中指定窗口：
+
+```json
+{"window":"app","type":"invoke","node":"从控件树获取的节点 id","action":0}
+{"window":"app","type":"text","node":"可编辑节点 id","text":"新内容"}
+{"window":"app","type":"click","x":120,"y":200}
+{"window":"app","type":"longClick","x":120,"y":200}
+{"window":"app","type":"longDrag","x":120,"y":300,"endX":120,"endY":180}
+{"window":"app","type":"scroll","x":120,"y":500,"amount":3}
+{"window":"app","type":"key","key":"Escape"}
+```
+
+`invoke/text` 调用真实无障碍操作；坐标事件由 Compose 命中检测与手势处理器执行，不移动系统鼠标、不发送系统键盘事件、不激活窗口。按键支持 Tab、Enter、Escape、Space、Backspace、F5、F12。F5 刷新当前订阅或应用列表，菜单和弹窗打开时不触发。坐标及控件树 bounds 使用 AWT 逻辑像素，相对当前输入弹窗内容区，无弹窗时相对宿主内容区。节点路径仅属于该窗口最近一次控件树；失效返回 `Stale node path`。后台操作只支持 `area=content`，拒绝 `nativeKey`。
+
+截图默认 `mode=compose`，读取当前 Skia 绘制记录并合成弹窗和最近网页帧，响应头为 `X-GKD-Capture: compose-recording`。它不重新创建页面，可在窗口被遮挡或位于屏幕外时使用，但不含系统菜单等原生窗口。`mode=screen` 捕获屏幕像素，响应头为 `X-GKD-Capture: screen`，要求窗口可见且可能包含遮挡。两者均禁止 `activate=true`。`area=frame` 包含 Compose 标题栏，不含原生外边框。
+
+`POST /desktop/scenario` 默认页面为 `dashboard`，完整场景以 `/desktop/scenarios` 为准。支持带持久化序列化名称的 `route`：
+
+```json
+{"page":"rule-editor","route":{"type":"li.gkd.app.ui.navigation.UpsertRuleGroupRoute","subsId":-2,"forward":true}}
+```
+
+共享提示可用 `{"page":"dashboard","overlay":"terms"}` 预览，overlay 支持 terms、restricted、occupied；条款预览不写接受状态。更新从关于页检查，上传从日志或快照的生成链接操作进入真实流程。
+
+回放接口仅注入业务输入，不能代替控件点击验证：
+
+- `/desktop/runtime-records/replay` 接收 `activities`（appId/activityId/time）、`visits`（oldAppId/newAppId/time）、`actions`（appId/activityId/subsId/subsVersion/groupKey/groupType/ruleIndex/ruleKey/time）。空请求提交 Activity 缓冲并查询数据库；不执行真实动作、不增加旧的全局累计动作次数；`actions` 通过生产记录事务增加应用和规则组的累计触发统计。
+- `/desktop/snapshot-capture/replay` 接收 `source`（ComplexSnapshot，忽略原 ID）、与屏幕尺寸一致的 `screenshotBase64` 及可选 `autoExport`。共享流程生成并保存新快照，返回 `snapshot` 和 `exportResult`；系统下载不支持时仍保留已保存快照。
+
+## 故障处理与验收边界
+
+Windows x64 网页使用版本目录声明的 webview2-compose 和系统 WebView2 Runtime。缺少 Runtime 时按错误页提供的微软安装入口处理，再重试；不需要 Maven Local 或单独安装 CEF。关闭 App 时等待原生浏览器释放，超时保留窗口供再次关闭。
+
+Desktop 只能证明对应宿主的共享交互与业务结果，以下需按改动范围单独验收，不能视为已由后台 HTTP 或 JVM 测试覆盖：
+
+- Android 权限、IME、系统栏、预测返回、无障碍/Service、安装、相册和分享。真机检查前按 AGENTS.md 暂停自动化，结束、失败或中断后都恢复并核对。
+- Windows 网页键盘、IME、前台焦点、标题栏拖动、边缘缩放、系统菜单、Snap Layouts 及跨显示器 DPI。
+- 更新弹窗、忽略版本、取消下载、真实更新渠道及 GitHub 上传。本机 HTTP 客户端测试只证明解码、下载内容和进度。
+
+Desktop 与 Android 视觉对照须统一页面状态、dp、字体、fontScale、实际 Insets 和颜色。Compose 截图不证明系统焦点、真实遮挡或 Android 像素一致性。

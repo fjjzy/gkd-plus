@@ -1,9 +1,9 @@
 package li.gkd.selector
 
+import kotlin.js.JsExport
 import li.gkd.selector.property.FastQueryOperator
 import li.gkd.selector.property.compareFastQueryValue
 import li.gkd.selector.property.comparePrimitiveValue
-import kotlin.js.JsExport
 
 @JsExport
 public sealed class FastQuery(
@@ -11,7 +11,11 @@ public sealed class FastQuery(
 ) {
     internal abstract val attributeName: String
 
-    internal open fun acceptValue(candidate: Any?): Boolean = comparePrimitiveValue(candidate, value)
+    /** Tests a candidate attribute value using the same comparison as fast-query traversal. */
+    public fun accepts(value: String): Boolean = acceptValue(value)
+
+    internal open fun acceptValue(candidate: Any?): Boolean =
+        comparePrimitiveValue(candidate, value)
 
     public data class Id(override val value: String) : FastQuery(value) {
         override val attributeName: String

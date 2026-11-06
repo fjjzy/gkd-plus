@@ -1,0 +1,151 @@
+name: release
+
+on:
+  push:
+    tags:
+      - v*
+
+jobs:
+  build:
+    permissions:
+      contents: write
+      # Trusted Publishing (OIDC) 发布 npm 包所需
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_CACHE_ENCRYPTION_KEY }}
+
+      - name: write gkd keystore
+        run: echo ${{ secrets.GKD_STORE_FILE_BASE64 }} | base64 --decode > ${{ github.workspace }}/gkd.jks
+
+      # GKD-Plus 不上架 Google Play, 只构建 gkd 渠道; play 渠道需要独立的 Play 签名密钥, 这里不构建
+      - run: ./gradlew :gkd-android:assembleGkdRelease
+        env:
+          GKD_GITHUB_COOKIE: ${{ secrets.GKD_GITHUB_COOKIE }}
+          GKD_API_AUTH_TOKEN: ${{ secrets.GKD_API_AUTH_TOKEN }}
+          GKD_SERVER_TOKEN: ${{ secrets.GKD_API_AUTH_TOKEN }}
+          GKD_STORE_FILE: ${{ github.workspace }}/gkd.jks
+          GKD_STORE_PASSWORD: ${{ secrets.GKD_STORE_PASSWORD }}
+          GKD_KEY_ALIAS: ${{ secrets.GKD_KEY_ALIAS }}
+          GKD_KEY_PASSWORD: ${{ secrets.GKD_KEY_PASSWORD }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release
+          path: gkd-android/build/outputs/apk/gkd/release
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: outputs
+          path: gkd-android/build/outputs
+
+      - run: |
+          cp outputs/apk/gkd/release/*.apk "${GITHUB_WORKSPACE}/gkd-${GITHUB_REF_NAME}.apk"
+          zip -r "${GITHUB_WORKSPACE}/outputs-${GITHUB_REF_NAME}.zip" outputs
+        working-directory: gkd-android/build
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          body_path: ./CHANGELOG.md
+          prerelease: ${{ contains(github.ref_name, 'beta') }}
+          fail_on_unmatched_files: true
+          files: |
+            gkd-*.apk
+            outputs-*.zip
+
+      # 同步版本号与描述到 Gitee 仓库的 version.json, 作为 App 在 GitHub 不可达时的更新兜底
+      # 覆盖 versionCode/versionName, 并从 CHANGELOG.md 生成 desc("# 更新内容" 下的 "- " 条目
+      # 转成 "N. " 编号分点) 一并写入; quarkUrl 保留 Gitee 上手动维护的值
+      # npm 步骤复用这份 version.json, 所以 npm 的 gkdPlus.desc 会自动同步
+      # 需要仓库 secret: GITEE_TOKEN (Gitee 私人令牌, 具备 projects 读写权限)
+      #
+      # desc 现在由 CHANGELOG.md 自动生成, 发版前只需改 CHANGELOG.md 即可,
+      # 不要再手动去 Gitee 改 desc(2026-10-23 发 v1.12.2-plus.2 就因手动维护漏更新)
+      - name: update gitee version.json
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          set -euo pipefail
+          metadata=gkd-android/build/outputs/apk/gkd/release/output-metadata.json
+          version_code=$(jq -r '.elements[0].versionCode' "${metadata}")
+          version_name=$(jq -r '.elements[0].versionName' "${metadata}")
+
+          # 从 CHANGELOG.md 生成 desc: "# 更新内容" 下的 "- " 条目 -> "N. " 编号分点
+          desc=$(awk '/^## /{exit} /^- /{gsub(/^- /,""); n++; print n". "$0}' CHANGELOG.md)
+          if [ -z "${desc}" ]; then
+            echo "CHANGELOG.md has no '- ' entries under '# 更新内容'" >&2
+            exit 1
+          fi
+
+          repo=fjjzy/gkd-plus
+          branch=master
+          path=version.json
+          api="https://gitee.com/api/v5/repos/${repo}/contents/${path}"
+
+          current=$(curl -sSf "${api}?access_token=${GITEE_TOKEN}&ref=${branch}")
+          sha=$(jq -r '.sha' <<<"${current}")
+          json=$(jq -r '.content' <<<"${current}" | base64 -d)
+          updated=$(jq --argjson code "${version_code}" --arg name "${version_name}" --arg desc "${desc}" \
+            '.versionCode = $code | .versionName = $name | .desc = $desc' <<<"${json}")
+          content=$(base64 -w0 <<<"${updated}")
+
+          status=$(curl -sS -o /tmp/gitee-response.json -w '%{http_code}' -X PUT "${api}" \
+            --data-urlencode "access_token=${GITEE_TOKEN}" \
+            --data-urlencode "branch=${branch}" \
+            --data-urlencode "message=chore: bump to ${version_name} (${version_code})" \
+            --data-urlencode "sha=${sha}" \
+            --data-urlencode "content=${content}")
+          if [ "${status}" != "200" ] && [ "${status}" != "201" ]; then
+            echo "gitee update failed (HTTP ${status}):" >&2
+            cat /tmp/gitee-response.json >&2
+            exit 1
+          fi
+          echo "gitee ${path} updated to ${version_name} (${version_code})"
+
+      # 发布 npm 包 gkd-plus-version, npmmirror 会自动同步, 作为 App 的第三个更新兜底源
+      # 版本信息复用上一步已更新的 Gitee version.json, 写进包清单的自定义字段 gkdPlus
+      # (App 读 https://registry.npmmirror.com/gkd-plus-version/latest; npmmirror 的
+      #  latest/files/* 只对白名单包开放, 取不了包内文件)
+      # 用 Trusted Publishing (OIDC) 发布, 不存任何 npm token; 依赖上面的 id-token: write
+      # 以及 npmjs.com 上 gkd-plus-version 的 trusted publisher 配置:
+      # fjjzy/gkd-plus + release.yml, 且勾选允许 npm publish (不只是 stage publish)
+      - uses: actions/setup-node@v7
+        with:
+          # Trusted Publishing 要求 npm CLI >= 11.5.1, 即 Node >= 22.14
+          node-version: '24'
+
+      - name: publish version.json to npm
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          set -euo pipefail
+          metadata=gkd-android/build/outputs/apk/gkd/release/output-metadata.json
+          version_code=$(jq -r '.elements[0].versionCode' "${metadata}")
+
+          pkg=$(mktemp -d)
+          # repository 字段必需: 带 provenance 的发布(npm trusted publishing)会校验
+          # package.json 的 repository.url 与 GitHub 仓库一致, 缺失会 422
+          curl -sSf "https://gitee.com/api/v5/repos/fjjzy/gkd-plus/contents/version.json?access_token=${GITEE_TOKEN}&ref=master" \
+            | jq -r '.content' | base64 -d \
+            | jq --arg v "1.0.${version_code}" \
+                '{name:"gkd-plus-version",version:$v,description:"gkd-plus update fallback metadata",license:"MIT",repository:"https://github.com/fjjzy/gkd-plus",gkdPlus:.}' \
+            > "${pkg}/package.json"
+
+          cd "${pkg}"
+          # npm 兜底源发布失败不应阻塞发版, 主源与 Gitee 兜底仍然可用
+          if npm publish; then
+            echo "npm gkd-plus-version published as 1.0.${version_code}"
+          else
+            echo "::warning::npm publish failed, npm fallback source will stay stale"
+          fi

@@ -7,8 +7,11 @@ public sealed class SelectorTypeKind(public val key: String) {
         get() = key
 
     public data object BooleanType : SelectorTypeKind("boolean")
+
     public data object IntType : SelectorTypeKind("int")
+
     public data object StringType : SelectorTypeKind("string")
+
     public data class ObjectType(val name: String) : SelectorTypeKind("object") {
         override val displayName: String
             get() = name
@@ -26,7 +29,8 @@ public data class SelectorProperty(
     val type: SelectorType,
 )
 
-public class SelectorType internal constructor(
+public class SelectorType
+internal constructor(
     public val type: SelectorTypeKind,
 ) {
     private var initialized: Boolean = false
@@ -76,7 +80,11 @@ public class SelectorTypeModelBuilder {
         return SelectorType(type).also { definitions[it] = Definition() }
     }
 
-    public fun property(owner: SelectorType, name: String, type: SelectorType): SelectorTypeModelBuilder {
+    public fun property(
+        owner: SelectorType,
+        name: String,
+        type: SelectorType,
+    ): SelectorTypeModelBuilder {
         requireOwned(type)
         definition(owner).props.add(SelectorProperty(name, type))
         return this
@@ -94,12 +102,18 @@ public class SelectorTypeModelBuilder {
         return this
     }
 
-    internal fun properties(owner: SelectorType, props: List<SelectorProperty>): SelectorTypeModelBuilder {
+    internal fun properties(
+        owner: SelectorType,
+        props: List<SelectorProperty>,
+    ): SelectorTypeModelBuilder {
         definition(owner).props.addAll(props)
         return this
     }
 
-    internal fun methods(owner: SelectorType, methods: List<SelectorMethod>): SelectorTypeModelBuilder {
+    internal fun methods(
+        owner: SelectorType,
+        methods: List<SelectorMethod>,
+    ): SelectorTypeModelBuilder {
         definition(owner).methods.addAll(methods)
         return this
     }
@@ -125,6 +139,7 @@ public class SelectorTypeModelBuilder {
 }
 
 @JsExport
-public class SelectorTypeModel internal constructor(
+public class SelectorTypeModel
+internal constructor(
     internal val globalType: SelectorType,
 )

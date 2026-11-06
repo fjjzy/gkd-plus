@@ -1,0 +1,23 @@
+package li.gkd.app.ui
+
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlinx.coroutines.runBlocking
+import li.gkd.app.resources.*
+import org.jetbrains.compose.resources.getString
+
+class StringResourceTest {
+    @Test
+    fun blockingAndSuspendingReadsPreserveLiteralUserInput() = runBlocking {
+        val input = "50% %2\$s <button> & '\${name}'"
+        val expected = "已存在同名「$input」规则"
+        assertEquals(expected, getString(Res.string.rule_name_duplicate, input))
+        assertEquals(expected, Res.string.rule_name_duplicate.getSync(input))
+    }
+
+    @Test
+    fun migrationPreservesTrailingWhitespaceAndNewlines() = runBlocking {
+        assertEquals("最近触发: ", getString(Res.string.action_log_recent_prefix))
+        assertEquals("请输入应用规则\n", getString(Res.string.app_rule_input_hint))
+    }
+}

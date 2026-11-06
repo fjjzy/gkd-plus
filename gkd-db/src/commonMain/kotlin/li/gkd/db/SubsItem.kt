@@ -9,14 +9,10 @@ import androidx.room3.OnConflictStrategy
 import androidx.room3.PrimaryKey
 import androidx.room3.Query
 import androidx.room3.Transaction
-import androidx.room3.Upsert
 import androidx.room3.Update
+import androidx.room3.Upsert
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
-
-const val LOCAL_SUBS_ID = -2L
-const val LOCAL_HTTP_SUBS_ID = -1L
-val LOCAL_SUBS_IDS = arrayOf(LOCAL_SUBS_ID, LOCAL_HTTP_SUBS_ID)
 
 @Serializable
 @Entity(
@@ -24,23 +20,20 @@ val LOCAL_SUBS_IDS = arrayOf(LOCAL_SUBS_ID, LOCAL_HTTP_SUBS_ID)
 )
 data class SubsItem(
     @PrimaryKey @ColumnInfo(name = "id") val id: Long,
-
     @ColumnInfo(name = "ctime") val ctime: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "mtime") val mtime: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "enable") val enable: Boolean = false,
     @ColumnInfo(name = "enable_update") val enableUpdate: Boolean = true,
     @ColumnInfo(name = "order") val order: Int,
     @ColumnInfo(name = "update_url") val updateUrl: String? = null,
-
-    ) {
+) {
 
     val isLocal: Boolean
-        get() = LOCAL_SUBS_IDS.contains(id)
+        get() = SubscriptionIds.isLocal(id)
 
     @Dao
     interface SubsItemDao {
-        @Update
-        suspend fun update(vararg objects: SubsItem): Int
+        @Update suspend fun update(vararg objects: SubsItem): Int
 
         @Query("UPDATE subs_item SET enable=:enable WHERE id=:id")
         suspend fun updateEnable(id: Long, enable: Boolean): Int
@@ -55,26 +48,21 @@ data class SubsItem(
             }
         }
 
-        @Upsert
-        suspend fun upsert(vararg users: SubsItem): List<Long>
+        @Upsert suspend fun upsert(vararg users: SubsItem): List<Long>
 
         @Insert(onConflict = OnConflictStrategy.IGNORE)
         suspend fun insertOrIgnore(vararg users: SubsItem): List<Long>
 
-        @Delete
-        suspend fun delete(vararg users: SubsItem): Int
+        @Delete suspend fun delete(vararg users: SubsItem): Int
 
         @Query("UPDATE subs_item SET mtime=:mtime WHERE id=:id")
         suspend fun updateMtime(id: Long, mtime: Long = System.currentTimeMillis()): Int
 
-        @Query("SELECT * FROM subs_item ORDER BY `order`")
-        fun query(): Flow<List<SubsItem>>
+        @Query("SELECT * FROM subs_item ORDER BY `order`") fun query(): Flow<List<SubsItem>>
 
-        @Query("SELECT * FROM subs_item ORDER BY `order`")
-        suspend fun queryAll(): List<SubsItem>
+        @Query("SELECT * FROM subs_item ORDER BY `order`") suspend fun queryAll(): List<SubsItem>
 
         @Query("DELETE FROM subs_item WHERE id IN (:ids)")
         suspend fun deleteById(vararg ids: Long): Int
     }
-
 }

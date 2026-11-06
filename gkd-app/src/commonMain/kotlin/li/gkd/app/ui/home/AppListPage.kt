@@ -1,0 +1,496 @@
+package li.gkd.app.ui.home
+
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import li.gkd.app.app.AppInfoRepository
+import li.gkd.app.app.AppSort
+import li.gkd.app.error.displayMessage
+import li.gkd.app.error.messageResource
+import li.gkd.app.model.AppInfo
+import li.gkd.app.model.findOption
+import li.gkd.app.permission.AppPermission
+import li.gkd.app.record.TriggerStats
+import li.gkd.app.record.TriggerSummary
+import li.gkd.app.resources.*
+import li.gkd.app.settings.SettingsRepository
+import li.gkd.app.state.Loadable
+import li.gkd.app.ui.MainViewModel
+import li.gkd.app.ui.component.GkAnimatedFloatingActionButton
+import li.gkd.app.ui.component.GkAppBarTextField
+import li.gkd.app.ui.component.GkAppNameText
+import li.gkd.app.ui.component.GkCheckbox
+import li.gkd.app.ui.component.GkDesktopKeyHandler
+import li.gkd.app.ui.component.GkEmptyState
+import li.gkd.app.ui.component.GkFilterIconButton
+import li.gkd.app.ui.component.GkIcon
+import li.gkd.app.ui.component.GkIconButton
+import li.gkd.app.ui.component.GkIcons
+import li.gkd.app.ui.component.GkLoadingState
+import li.gkd.app.ui.component.GkMenuGroupCard
+import li.gkd.app.ui.component.GkMenuItemCheckbox
+import li.gkd.app.ui.component.GkMenuItemRadioButton
+import li.gkd.app.ui.component.GkPageBottomSpace
+import li.gkd.app.ui.component.GkPageBottomSpaceDefaults
+import li.gkd.app.ui.component.GkPullToRefreshBox
+import li.gkd.app.ui.component.GkQueryPkgAuthCard
+import li.gkd.app.ui.component.GkRuleStats
+import li.gkd.app.ui.component.GkRuleStatsData
+import li.gkd.app.ui.component.GkTopAppBar
+import li.gkd.app.ui.component.GkTriggerCount
+import li.gkd.app.ui.component.LocalOverlayBackHandler
+import li.gkd.app.ui.component.autoFocus
+import li.gkd.app.ui.component.gkTopAppBarScroll
+import li.gkd.app.ui.component.rememberListScrollState
+import li.gkd.app.ui.icon.GkBlockCloseIconButton
+import li.gkd.app.ui.icon.GkSearchCloseIconButton
+import li.gkd.app.ui.image.GkAppIcon
+import li.gkd.app.ui.navigation.AppConfigRoute
+import li.gkd.app.ui.navigation.EditBlockAppListRoute
+import li.gkd.app.ui.option.AppGroupOption
+import li.gkd.app.ui.platform.GkBackHandler
+import li.gkd.app.ui.platform.LocalUiHost
+import li.gkd.app.ui.platform.hideIme
+import li.gkd.app.ui.share.launchUiAction
+import li.gkd.app.ui.style.getUpDownTransform
+import li.gkd.app.ui.style.itemPadding
+import li.gkd.app.util.ToastUtils
+import org.jetbrains.compose.resources.getString
+import org.jetbrains.compose.resources.stringResource
+
+data class AppListContentState(
+    val appInfos: List<AppInfo>,
+    val listState: Loadable<Unit> = Loadable.Ready(Unit),
+    val ruleStatsError: Throwable? = null,
+    val triggerStats: TriggerStats? = null,
+    val searchText: String = "",
+    val showSearchBar: Boolean = false,
+    val editWhiteListMode: Boolean = false,
+    val showAllApps: Boolean = true,
+    val ruleStats: Map<String, GkRuleStatsData> = emptyMap(),
+    val whiteListAppIds: Set<String> = emptySet(),
+    val canQueryPackages: Boolean = true,
+    val queryPackagesAbnormal: Boolean = false,
+    val refreshing: Boolean = false,
+    val sort: Int = 0,
+    val group: Int = 3,
+    val showBlocked: Boolean = true,
+)
+
+@Composable
+fun appListPage(
+    vm: HomeViewModel,
+): ScaffoldExt {
+    val host = LocalUiHost.current
+    val mainVm = MainViewModel.requireCurrent()
+    val store by SettingsRepository.settings.collectAsStateWithLifecycle()
+    val appState by vm.appsState.collectAsStateWithLifecycle()
+    val blocked by SettingsRepository.blockMatchAppList.collectAsStateWithLifecycle()
+    val controls by vm.appListState.collectAsStateWithLifecycle()
+    val state = controls.content(appState, store, blocked)
+
+    val scope = rememberCoroutineScope()
+    fun refresh() {
+        scope.launch {
+            try {
+                AppInfoRepository.refresh()
+                ToastUtils.show(getString(Res.string.app_list_update_success))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                ToastUtils.show(e.displayMessage())
+            }
+        }
+    }
+    GkDesktopKeyHandler(Key.F5, onKey = ::refresh)
+    val appInfos = state.appInfos
+    val searchStr = state.searchText
+
+    val showSearchBar = state.showSearchBar
+    val refreshing = state.refreshing
+    val editWhiteListMode = state.editWhiteListMode
+    val pageScrollState = rememberListScrollState()
+    val scrollBehavior = pageScrollState.scrollBehavior
+    val listState = pageScrollState.listState
+    pageScrollState.ResetOnListChange(
+        appInfos,
+        key = { it.id },
+        leadingItemKey = if (state.canQueryPackages) null else 1,
+    )
+    ResetPageScrollOnRequest(
+        vm.homeState,
+        BottomNavItem.AppList,
+        pageScrollState::resetScrollAndAwait,
+    )
+    return ScaffoldExt(
+        navItem = BottomNavItem.AppList,
+        modifier = Modifier.gkTopAppBarScroll(scrollBehavior),
+        topBar = {
+            DisposableEffect(null) {
+                onDispose {
+                    vm.leaveAppList()
+                }
+            }
+            GkTopAppBar(
+                scrollBehavior = scrollBehavior,
+                title = {
+                    val firstShowSearchBar = remember { showSearchBar }
+                    if (showSearchBar) {
+                        GkBackHandler { if (!host.hideIme()) vm.closeAppSearch() }
+                        GkAppBarTextField(
+                            value = searchStr,
+                            onValueChange = vm::setAppSearchText,
+                            hint = stringResource(Res.string.app_name_id_input_hint),
+                            modifier = if (firstShowSearchBar) Modifier else Modifier.autoFocus(),
+                        )
+                    } else {
+                        val titleModifier =
+                            Modifier.clickable(
+                                interactionSource = null,
+                                indication = null,
+                                onClick = {
+                                    pageScrollState.resetScroll()
+                                },
+                            )
+                        if (editWhiteListMode) {
+                            GkBackHandler(onBack = vm::closeAppListEdit)
+                        }
+                        AnimatedContent(
+                            targetState = editWhiteListMode,
+                            transitionSpec = { getUpDownTransform() },
+                        ) { localEditWhiteListMode ->
+                            if (localEditWhiteListMode) {
+                                Text(
+                                    modifier = titleModifier,
+                                    text = stringResource(Res.string.app_whitelist),
+                                )
+                            } else {
+                                Text(
+                                    modifier = titleModifier,
+                                    text = BottomNavItem.AppList.label,
+                                )
+                            }
+                        }
+                    }
+                },
+                actions = {
+                    if (state.queryPackagesAbnormal) {
+                        CompositionLocalProvider(
+                            LocalContentColor provides MaterialTheme.colorScheme.error,
+                        ) {
+                            GkIconButton(
+                                imageVector = GkIcons.WarningAmber,
+                                contentDescription = stringResource(Res.string.permission_error),
+                                onClick = {
+                                    scope.launch {
+                                        mainVm.dialogRequests.showMessage(
+                                            getString(Res.string.permission_error),
+                                            getString(
+                                                Res.string.app_list_permission_error_description,
+                                                getString(Res.string.permission_query_apps),
+                                            ),
+                                        )
+                                    }
+                                },
+                            )
+                        }
+                    }
+                    GkSearchCloseIconButton(
+                        onClick = vm::toggleAppSearch,
+                        isSearchOpen = showSearchBar,
+                        contentDescription =
+                            if (showSearchBar) stringResource(Res.string.search_close)
+                            else stringResource(Res.string.app_list_search),
+                    )
+                    var expanded by remember { mutableStateOf(false) }
+                    if (expanded) LocalOverlayBackHandler.current { expanded = false }
+                    GkFilterIconButton(
+                        filtered = !state.showAllApps,
+                        contentDescription = stringResource(Res.string.sort_filter),
+                        onClick = {
+                            expanded = true
+                        },
+                    )
+                    Box(modifier = Modifier.wrapContentSize(Alignment.TopStart)) {
+                        DropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false },
+                        ) {
+                            GkMenuGroupCard(
+                                inTop = true,
+                                title = stringResource(Res.string.sort_title),
+                            ) {
+                                AppSort.options.forEach { option ->
+                                    GkMenuItemRadioButton(
+                                        text = stringResource(option.labelResource),
+                                        selected = AppSort.options.findOption(state.sort) == option,
+                                        onClick = {
+                                            SettingsRepository.updateSettings {
+                                                it.copy(appSort = option.value)
+                                            }
+                                        },
+                                    )
+                                }
+                            }
+                            GkMenuGroupCard(title = stringResource(Res.string.group_title)) {
+                                AppGroupOption.normalObjects.forEach { option ->
+                                    val newValue = option.invert(state.group)
+                                    GkMenuItemCheckbox(
+                                        enabled = newValue != 0,
+                                        text = stringResource(option.labelResource),
+                                        checked = option.include(state.group),
+                                        onClick = {
+                                            SettingsRepository.updateSettings {
+                                                it.copy(appGroupType = newValue)
+                                            }
+                                        },
+                                    )
+                                }
+                            }
+                            GkMenuGroupCard(title = stringResource(Res.string.display_title)) {
+                                GkMenuItemCheckbox(
+                                    text = stringResource(Res.string.whitelist_title),
+                                    checked = state.showBlocked,
+                                    onClick = {
+                                        SettingsRepository.updateSettings {
+                                            it.copy(showBlockApp = !state.showBlocked)
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                    }
+                    GkBlockCloseIconButton(
+                        isClose = editWhiteListMode,
+                        contentDescription = stringResource(Res.string.whitelist_edit_mode_toggle),
+                        onClickLabel =
+                            if (editWhiteListMode) stringResource(Res.string.edit_exit)
+                            else stringResource(Res.string.edit_enter),
+                        onClick = { vm.toggleAppListEdit(blocked) },
+                    )
+                },
+            )
+        },
+        floatingActionButton = {
+            GkAnimatedFloatingActionButton(
+                visible = editWhiteListMode,
+                contentDescription = stringResource(Res.string.whitelist_edit),
+                onClick = {
+                    mainVm.navigator.navigate(EditBlockAppListRoute)
+                },
+                imageVector = GkIcons.Edit,
+            )
+        },
+    ) { contentPadding ->
+        GkPullToRefreshBox(
+            modifier = Modifier.padding(contentPadding),
+            isRefreshing = refreshing,
+            onRefresh = ::refresh,
+        ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                state = listState,
+            ) {
+                if (!state.canQueryPackages) {
+                    item(key = 1, contentType = 1) {
+                        GkQueryPkgAuthCard(
+                            state.refreshing,
+                            mainVm.scope.launchUiAction {
+                                mainVm.permissions.ensurePermissions(AppPermission.QueryPackages)
+                            },
+                        )
+                    }
+                }
+                if (state.listState is Loadable.Loading) {
+                    item("load-state") { GkLoadingState() }
+                } else {
+                    val error =
+                        (state.listState as? Loadable.Failure)?.cause ?: state.ruleStatsError
+                    if (error != null) {
+                        item("load-state") {
+                            Text(
+                                text = error.messageResource(),
+                                modifier = Modifier.padding(16.dp),
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    }
+                }
+                items(appInfos, { it.id }) { appInfo ->
+                    val stats = if (editWhiteListMode) null else state.ruleStats[appInfo.id]
+                    GkAppListItem(
+                        appInfo = appInfo,
+                        icon = { GkAppIcon(appInfo.id, 32.dp) },
+                        name = { GkAppNameText(appId = appInfo.id, appInfo = appInfo) },
+                        stats = stats,
+                        triggerSummary =
+                            if (editWhiteListMode) null else state.triggerStats?.app(appInfo.id),
+                        editWhiteListMode = editWhiteListMode,
+                        inWhiteList = appInfo.id in state.whiteListAppIds,
+                        onClick =
+                            vm.scope.launchUiAction {
+                                if (editWhiteListMode) {
+                                    SettingsRepository.updateBlockMatchAppList {
+                                        if (appInfo.id in it) it - appInfo.id else it + appInfo.id
+                                    }
+                                } else {
+                                    host.hideIme()
+                                    mainVm.navigator.navigate(AppConfigRoute(appInfo.id))
+                                }
+                            },
+                    )
+                }
+                item("placeholder", "placeholder") {
+                    if (
+                        state.listState is Loadable.Ready &&
+                            appInfos.isEmpty() &&
+                            searchStr.isNotEmpty()
+                    ) {
+                        GkEmptyState(
+                            text =
+                                if (state.showAllApps) stringResource(Res.string.search_no_results)
+                                else stringResource(Res.string.search_no_results_filter_hint),
+                        )
+                        GkPageBottomSpace(height = GkPageBottomSpaceDefaults.CompactHeight)
+                    } else {
+                        GkPageBottomSpace()
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun GkAppListItem(
+    appInfo: AppInfo,
+    icon: @Composable () -> Unit,
+    name: @Composable () -> Unit,
+    stats: GkRuleStatsData?,
+    triggerSummary: TriggerSummary? = null,
+    editWhiteListMode: Boolean,
+    inWhiteList: Boolean,
+    onClick: () -> Unit,
+) {
+    val count = triggerSummary?.count?.takeIf { it > 0 && !editWhiteListMode }
+    val countText = count?.toString()
+    val statsDescription = stats?.takeIf { it.hasRules }?.description
+    val appIdText = appInfo.id.takeIf { it != appInfo.name }
+    val supportingDescription =
+        listOfNotNull(
+                statsDescription ?: appIdText,
+                countText?.let { stringResource(Res.string.trigger_count_value, it) },
+            )
+            .joinToString("，")
+    val description =
+        if (editWhiteListMode || supportingDescription.isEmpty()) appInfo.name
+        else
+            stringResource(
+                Res.string.app_whitelist_state_description,
+                appInfo.name,
+                supportingDescription,
+            )
+    val member = stringResource(Res.string.whitelist_member)
+    val notMember = stringResource(Res.string.whitelist_not_member)
+    val clickLabel =
+        if (editWhiteListMode)
+            stringResource(
+                if (inWhiteList) Res.string.whitelist_remove else Res.string.whitelist_add,
+            )
+        else stringResource(Res.string.rule_summary_open)
+
+    Row(
+        modifier =
+            Modifier.clickable(onClick = onClick)
+                .clearAndSetSemantics {
+                    contentDescription = description
+                    if (inWhiteList) {
+                        stateDescription = member
+                    } else if (editWhiteListMode) {
+                        stateDescription = notMember
+                    }
+                    onClick(
+                        label = clickLabel,
+                        action = null,
+                    )
+                }
+                .itemPadding()
+                .alpha(if (inWhiteList && !editWhiteListMode) 0.65f else 1f),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        icon()
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            name()
+            if (stats != null) {
+                GkRuleStats(stats, emptyText = appIdText.orEmpty())
+            } else if (appIdText != null) {
+                Text(
+                    text = appIdText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    softWrap = false,
+                )
+            }
+        }
+        if (editWhiteListMode) {
+            GkCheckbox(
+                key = appInfo.id,
+                checked = inWhiteList,
+            )
+        } else if (countText != null || inWhiteList) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (count != null) GkTriggerCount(count, lastTriggerTime = triggerSummary.lastTime)
+                if (inWhiteList) {
+                    GkIcon(
+                        modifier = Modifier.padding(2.dp).size(20.dp),
+                        imageVector = GkIcons.Block,
+                        tint = MaterialTheme.colorScheme.secondary,
+                    )
+                }
+            }
+        }
+    }
+}

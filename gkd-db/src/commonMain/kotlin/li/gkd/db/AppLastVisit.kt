@@ -27,17 +27,13 @@ data class AppLastVisit(
         @Query(
             """
             DELETE FROM app_last_visit
-            WHERE (
-                    SELECT COUNT(*)
-                    FROM app_last_visit
-                ) > 500
-                AND last_visit_time <= (
+            WHERE last_visit_time <= (
                     SELECT last_visit_time
                     FROM app_last_visit
                     ORDER BY last_visit_time DESC
                     LIMIT 1 OFFSET 500
                 )
-        """
+        """,
         )
         suspend fun deleteKeepLatest(): Int
     }

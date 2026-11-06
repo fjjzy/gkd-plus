@@ -1,9 +1,5 @@
 package li.gkd.selector.syntax
 
-import li.gkd.selector.relation.RelationExpression
-import li.gkd.selector.relation.RelationSelector
-import li.gkd.selector.relation.PolynomialExpression
-import li.gkd.selector.relation.TupleExpression
 import li.gkd.selector.engine.LogicalSelectorExpression
 import li.gkd.selector.engine.NotSelectorExpression
 import li.gkd.selector.engine.SelectorExpression
@@ -14,6 +10,10 @@ import li.gkd.selector.property.NotExpression
 import li.gkd.selector.property.PropertyExpression
 import li.gkd.selector.property.PropertySelector
 import li.gkd.selector.property.ValueExpression
+import li.gkd.selector.relation.PolynomialExpression
+import li.gkd.selector.relation.RelationExpression
+import li.gkd.selector.relation.RelationSelector
+import li.gkd.selector.relation.TupleExpression
 
 internal object SelectorPrinter {
     private sealed interface Action
@@ -42,9 +42,12 @@ internal object SelectorPrinter {
 
     fun render(expression: SelectorExpression): String = render(SelectorAction(expression))
 
-    fun render(expression: PropertyExpression): String = render(PropertyExpressionAction(expression))
+    fun render(expression: PropertyExpression): String =
+        render(PropertyExpressionAction(expression))
 
     fun render(expression: ValueExpression): String = render(ValueAction(expression))
+
+    fun render(relation: RelationSelector): String = render(RelationSelectorAction(relation))
 
     private fun render(initial: Action): String = buildString {
         val stack = mutableListOf<Action>(initial)
@@ -83,7 +86,7 @@ internal object SelectorPrinter {
                     SelectorAction(
                         expression.right,
                         expression.right is UnitSelectorExpression ||
-                                expression.right is LogicalSelectorExpression &&
+                            expression.right is LogicalSelectorExpression &&
                                 expression.right.operator != expression.operator,
                     ),
                 )
@@ -92,7 +95,7 @@ internal object SelectorPrinter {
                     SelectorAction(
                         expression.left,
                         expression.left is UnitSelectorExpression ||
-                                expression.left is LogicalSelectorExpression &&
+                            expression.left is LogicalSelectorExpression &&
                                 expression.left.operator != expression.operator,
                     ),
                 )
@@ -155,7 +158,7 @@ internal object SelectorPrinter {
                     PropertyExpressionAction(
                         expression.right,
                         expression.right is LogicalExpression &&
-                                expression.right.operator != expression.operator,
+                            expression.right.operator != expression.operator,
                     ),
                 )
                 stack.add(Text(" ${expression.operator.key} "))
@@ -163,7 +166,7 @@ internal object SelectorPrinter {
                     PropertyExpressionAction(
                         expression.left,
                         expression.left is LogicalExpression &&
-                                expression.left.operator != expression.operator,
+                            expression.left.operator != expression.operator,
                     ),
                 )
             }
@@ -208,18 +211,19 @@ internal object SelectorPrinter {
 
     private fun StringBuilder.appendRelationExpression(expression: RelationExpression) {
         when (expression) {
-            is TupleExpression -> when {
-                expression.numbers.size == 1 && expression.numbers.first() == 1 -> Unit
-                expression.numbers.size == 1 -> append(expression.numbers.first())
-                else -> {
-                    append('(')
-                    expression.numbers.forEachIndexed { index, number ->
-                        if (index > 0) append(',')
-                        append(number)
+            is TupleExpression ->
+                when {
+                    expression.numbers.size == 1 && expression.numbers.first() == 1 -> Unit
+                    expression.numbers.size == 1 -> append(expression.numbers.first())
+                    else -> {
+                        append('(')
+                        expression.numbers.forEachIndexed { index, number ->
+                            if (index > 0) append(',')
+                            append(number)
+                        }
+                        append(')')
                     }
-                    append(')')
                 }
-            }
 
             is PolynomialExpression -> appendPolynomial(expression)
         }
@@ -231,17 +235,19 @@ internal object SelectorPrinter {
         when {
             a > 0 && b > 0 -> append(if (a == 1) "(n+$b)" else "(${a}n+$b)")
             a < 0 && b > 0 -> append(if (a == -1) "($b-n)" else "($b${a}n)")
-            b == 0 -> when {
-                a == 1 -> append('n')
-                a > 0 -> append("${a}n")
-                else -> append("(${a}n)")
-            }
+            b == 0 ->
+                when {
+                    a == 1 -> append('n')
+                    a > 0 -> append("${a}n")
+                    else -> append("(${a}n)")
+                }
 
-            a == 0 -> when {
-                b == 1 -> Unit
-                b > 0 -> append(b)
-                else -> append("($b)")
-            }
+            a == 0 ->
+                when {
+                    b == 1 -> Unit
+                    b > 0 -> append(b)
+                    else -> append("($b)")
+                }
 
             else -> append("(${a}n${if (b >= 0) "+" else ""}$b)")
         }
@@ -254,32 +260,30 @@ private fun escapeString(value: String, wrapChar: Char = '"'): String {
     var index = 0
     while (index < value.length) {
         val char = value[index]
-        if (
-            char in '\uD800'..'\uDBFF' &&
-            value.getOrNull(index + 1) in '\uDC00'..'\uDFFF'
-        ) {
+        if (char in '\uD800'..'\uDBFF' && value.getOrNull(index + 1) in '\uDC00'..'\uDFFF') {
             result.append(char)
             result.append(value[index + 1])
             index += 2
             continue
         }
-        val escapeChar = when (char) {
-            wrapChar -> wrapChar
-            '\n' -> 'n'
-            '\r' -> 'r'
-            '\t' -> 't'
-            '\b' -> 'b'
-            '\\' -> '\\'
-            else -> null
-        }
+        val escapeChar =
+            when (char) {
+                wrapChar -> wrapChar
+                '\n' -> 'n'
+                '\r' -> 'r'
+                '\t' -> 't'
+                '\b' -> 'b'
+                '\\' -> '\\'
+                else -> null
+            }
         if (escapeChar != null) {
             result.append("\\" + escapeChar)
         } else {
             when (char.code) {
                 in 0..0xf -> result.append("\\x0" + char.code.toString(16))
                 in 0x10..0x1f -> result.append("\\x" + char.code.toString(16))
-                in 0xd800..0xdfff ->
-                    result.append("\\u" + char.code.toString(16).padStart(4, '0'))
+                in 0xd800..0xdfff -> result.append("\\u" + char.code.toString(16).padStart(4, '0'))
+
                 else -> result.append(char)
             }
         }

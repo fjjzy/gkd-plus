@@ -1,6 +1,6 @@
 ---
 name: android-api-diff
-description: Inspect Android framework Java and AIDL APIs across versions with the android-api-diff CLI. Use when resolving an Android API to frameworks/base source, fetching the complete content of a tagged source file, comparing signatures or availability by Android version, explaining missing APIs, generating Java hidden-API access code, or explicitly prewarming the local query cache.
+description: Inspect Android framework Java and AIDL APIs across versions with the android-api-diff CLI. Use when finding an Android API across AOSP repositories, fetching the complete content of a tagged source file, comparing signatures or availability by Android version, explaining missing APIs, generating Java hidden-API access code, or explicitly prewarming the local query cache.
 ---
 
 # Android API Diff
@@ -14,21 +14,20 @@ output so results remain machine-readable.
   version query internally, so never call `query` first.
 - Run `query` when the user wants signatures, version ranges, availability,
   missing reasons, or source metadata.
-- Run `resolve` when the user only needs the matching `frameworks/base` file and
-  target kind.
-- Run `source` when the user wants the complete content of a known source path
-  at an exact Android release tag. If only an API name is known, run `resolve`
-  first and use its `source.path`.
+- Run `search` for fuzzy repository/path discovery or Java reference matching.
+- Run `source` for the complete content of an exact repository, path and tag.
+  If only an API name is known, use `search` and select its candidate `repo` and `path`.
 - Run `preload` only when the user explicitly asks to preload several APIs.
 
 Always quote API names because constructors and member references can contain
 shell-sensitive characters.
 
 ```sh
-android-api-diff resolve "ContentObserver()"
-android-api-diff source android-17.0.0_r1 core/java/android/accessibilityservice/AccessibilityButtonController.java
-android-api-diff query "IActivityManager.getTasks" --min-sdk 28
-android-api-diff generate "ActivityThread.currentApplication" --min-sdk 28
+android-api-diff search "ContentObserver()"
+android-api-diff search "platform/frameworks/base/core/java/android/content/pm/UserInfo.java"
+android-api-diff source --repo platform/frameworks/base --path core/java/android/accessibilityservice/AccessibilityButtonController.java --tag android-17.0.0_r1
+android-api-diff query --name "IActivityManager.getTasks" --min-sdk 28
+android-api-diff generate --name "ActivityThread.currentApplication" --min-sdk 28
 android-api-diff preload "ContentObserver()" "IActivityManager.getTasks" --min-sdk 28
 ```
 
@@ -39,6 +38,50 @@ then uses its built-in default.
 
 Treat exit code `0` together with top-level `ok: true` as success. Read the
 operation result from the top-level `result` field.
+
+`search` returns `result.candidates` with repository-relative `repo` and `path`,
+indexed `availableTags`, and reference metadata. `query` and `generate` accept
+`--name <reference>` or `--repo <repo> --path <path> --target <reference>`.
+Use `--anchor-tag <tag>` to select a specific initial definition. Without a target,
+`query` pins the exact file; type/member queries follow repository/path moves by
+fully qualified type identity.
+
+## Select a source
+
+Search text and `--name` accept an API reference, a file path, or a full repository
+prefix followed by the search text. For example:
+
+```sh
+android-api-diff query --name "platform/frameworks/base/core/java/android/content/pm/UserInfo.java"
+android-api-diff query --name "platform/frameworks/base/UserInfo.name"
+```
+
+A recognized repository prefix limits matching to that repository before matching
+the remaining text. Use the complete name, such as `platform/frameworks/base`,
+not the shorthand `base`. Repository-prefixed searches stay within that repository;
+use an unprefixed API reference to follow cross-repository moves. An explicit
+`--repo ... --path ... --target ...` selects the initial definition and still follows
+type identity across moves; it is not equivalent to a repository-prefixed search.
+
+When a file path appears in multiple repositories, including in different historical
+tags, use `repo/path` to identify the intended repository. A unique path can remain
+repository-relative. File-path queries inspect files, not a member formerly entered
+in the search text; use an API reference or `--target` for member queries.
+
+Default selection ranks suffix first (`.java` before `.aidl`, including `I`-prefixed
+interfaces), then repository (`platform/frameworks/base` before other repositories),
+then configured path preferences, with repository/path lexical order breaking ties.
+Simple searches choose the first matching definition rather than requiring manual
+selection for duplicate names. Inspect the selected source in the result and use
+explicit source options when the user intends another definition. Explicit selection
+and known historical redirect/superseded-definition rules remain applicable.
+
+## Interpret version coverage
+
+Read `result.tags` for each tag's actual source and status. `unknown` and
+`ambiguous` are not evidence of API absence. The bundled index contains audited
+snapshots, not every enumerated release tag. Code generation rejects incomplete
+or ambiguous histories. Candidate metadata alone does not establish availability.
 
 For `query`, describe range endpoints as the first or last tag checked in the
 current snapshot. A `last-checked` endpoint is not a promise that no later
@@ -54,6 +97,52 @@ describing which overloads were available together.
 On a nonzero exit code, read the structured JSON error from stderr and report its
 `error.code` and `error.message`. Do not add an automatic retry: the CLI network
 layer already retries transient fetches.
+
+## Choose an interface constant access strategy
+
+Four strategies are supported and have already been validated in the companion
+remap repository. Choose based on the user's build and value requirements;
+do not require another feasibility experiment unless the user requests one.
+
+| Strategy                | When to use it                                                                                                 | Declaration or access                                                                      |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Reflection              | Read the device's value without a remapped field access                                                        | Read the original interface field reflectively.                                            |
+| Interface stub          | Preserve runtime field access in a compatible remap build                                                      | Initialize the interface field with `RemapStub.value()`.                                   |
+| Consistent constant     | Embed a supported primitive expression that agrees across checked versions                                     | Keep the original initializer in the generated interface.                                  |
+| Implementing-class stub | Read the device's value through a known platform class implementing the interface, without `RemapStub.value()` | Declare a `public static`, non-final field with no initializer in that class's remap stub. |
+
+The current `generate` command automatically chooses the consistent-constant
+strategy for supported primitive initializers whose token sequences match across
+checked definitions, ignoring whitespace and comments. It does not evaluate
+expressions: `0x1` and `(1 << 0)` differ. Constant references, unsupported
+expressions, missing initializers, differing definitions, and non-primitive
+types fall back to `RemapStub.value()`. Agreement covers only checked versions;
+do not download all versions to strengthen this conclusion.
+
+Reflection and implementing-class stubs are adaptations of the generated code,
+not CLI flags or automatic generator fallbacks. Honor an explicitly selected
+strategy. For an interface/R8 incompatibility, use a consistent constant when
+the generated result supports it; otherwise prefer a known suitable platform
+implementing class, or reflection when no suitable class is known. Do not
+present the `RemapStub.value()` fallback as resolving that incompatibility.
+
+For example, access `IBinder.SHELL_COMMAND_TRANSACTION` through a stub mapped
+to the platform's `Binder` implementation:
+
+```java
+@li.songe.remap.RemapType(android.os.Binder.class)
+public class BinderHidden {
+    public static int SHELL_COMMAND_TRANSACTION;
+}
+```
+
+Read `BinderHidden.SHELL_COMMAND_TRANSACTION` at the call site. Keep the field
+name and type matching the original interface declaration; omit both `final`
+and an initializer. This strategy also applies to reference types and values
+that differ between versions. Map to the real platform implementing class;
+merely declaring a field in an unmapped application subclass creates a separate
+field. Use these declarations for reads, since the original interface field is
+final.
 
 ## Handle a missing CLI
 

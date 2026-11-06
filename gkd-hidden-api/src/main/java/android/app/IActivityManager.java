@@ -3,6 +3,7 @@ package android.app;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.os.Binder;
+import android.os.Bundle;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.IInterface;
@@ -28,6 +29,8 @@ public interface IActivityManager extends IInterface {
     void registerTaskStackListener(ITaskStackListener listener);
 
     void unregisterTaskStackListener(ITaskStackListener listener);
+
+    int startActivityAsUser(IApplicationThread caller, String callingPackage, Intent intent, String resolvedType, IBinder resultTo, String resultWho, int requestCode, int flags, ProfilerInfo profilerInfo, Bundle options, int userId);
 
     @DeprecatedSinceApi(api = Build.VERSION_CODES.R)
     ComponentName startService(IApplicationThread caller, Intent service, String resolvedType, boolean requireForeground, String callingPackage, int userId);

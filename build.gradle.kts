@@ -3,14 +3,17 @@ import com.android.build.api.dsl.KotlinMultiplatformAndroidLibraryTarget
 import com.android.build.api.dsl.LibraryExtension
 import com.android.build.gradle.AppPlugin
 import com.android.build.gradle.LibraryPlugin
+import li.gkd.gradle.gitInfo
+import org.jetbrains.kotlin.compose.compiler.gradle.ComposeCompilerGradlePluginExtension
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
-import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsEnvSpec
 import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsPlugin
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
+import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 
 plugins {
+    alias(libs.plugins.cmp) apply false
     alias(libs.plugins.google.ksp) apply false
     alias(libs.plugins.android.library) apply false
     alias(libs.plugins.android.kotlin.multiplatform.library) apply false
@@ -18,38 +21,54 @@ plugins {
     alias(libs.plugins.androidx.room) apply false
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.kotlin.multiplatform) apply false
-    alias(libs.plugins.kotlin.parcelize) apply false
     alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.remap) apply false
     alias(libs.plugins.codeorigin) apply false
     alias(libs.plugins.littlerobots.version)
 }
 
+extra["gkdVersionName"] = "1.13.0-plus.1"
+
+extra["gkdVersionCode"] = 101
+
 object Cfg {
-    val compileSdk get() = 37
-    val buildToolsVersion get() = "37.0.0"
-    val minSdk get() = 26
-    val targetSdk get() = compileSdk
+    val compileSdk
+        get() = 37
+
+    val buildToolsVersion
+        get() = "37.0.0"
+
+    val minSdk
+        get() = 26
+
+    val targetSdk
+        get() = compileSdk
+
     val sourceVersion = JavaVersion.VERSION_11
-    val targetVersion get() = sourceVersion
-    val kotlinTargetVersion get() = JvmTarget.fromTarget(targetVersion.majorVersion)
+    val targetVersion
+        get() = sourceVersion
+
+    val kotlinTargetVersion
+        get() = JvmTarget.fromTarget(targetVersion.majorVersion)
+
     // 统一应用于所有子项目；未依赖对应库的模块允许出现 unresolved opt-in marker 警告。
-    val kotlinCompilerArgs = listOf(
-        "-opt-in=kotlin.RequiresOptIn",
-        "-opt-in=kotlin.contracts.ExperimentalContracts",
-        "-opt-in=kotlinx.coroutines.FlowPreview",
-        "-opt-in=kotlinx.coroutines.ExperimentalCoroutinesApi",
-        "-opt-in=kotlinx.serialization.ExperimentalSerializationApi",
-        "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
-        "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi",
-        "-opt-in=androidx.compose.ui.ExperimentalComposeUiApi",
-        "-opt-in=androidx.compose.foundation.layout.ExperimentalLayoutApi",
-        "-XXLanguage:+MultiDollarInterpolation",
-        "-XXLanguage:+ExplicitBackingFields",
-    )
+    val kotlinCompilerArgs =
+        listOf(
+            "-opt-in=kotlin.contracts.ExperimentalContracts",
+            "-opt-in=kotlinx.coroutines.FlowPreview",
+            "-opt-in=kotlinx.coroutines.ExperimentalCoroutinesApi",
+            "-opt-in=kotlinx.serialization.ExperimentalSerializationApi",
+            "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
+            "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi",
+            "-opt-in=androidx.compose.ui.ExperimentalComposeUiApi",
+            "-opt-in=androidx.compose.foundation.layout.ExperimentalLayoutApi",
+            "-XXLanguage:+ExplicitBackingFields",
+            "-Xexpect-actual-classes",
+        )
 }
 
 val androidKmpLibraryPluginId = libs.plugins.android.kotlin.multiplatform.library.get().pluginId
+val composeCompilerPluginId = libs.plugins.kotlin.compose.get().pluginId
 
 allprojects {
     plugins.withType<NodeJsPlugin> {
@@ -60,6 +79,16 @@ allprojects {
 }
 
 subprojects {
+    plugins.withId(composeCompilerPluginId) {
+        extensions.configure<ComposeCompilerGradlePluginExtension> {
+            if (providers.gradleProperty("composeReports").isPresent) {
+                reportsDestination.set(layout.buildDirectory.dir("compose_compiler"))
+            }
+            stabilityConfigurationFiles.add(
+                rootProject.layout.projectDirectory.file("stability_config.conf"),
+            )
+        }
+    }
     tasks.withType<KotlinCompilationTask<*>>().configureEach {
         compilerOptions {
             freeCompilerArgs.addAll(Cfg.kotlinCompilerArgs)
@@ -98,14 +127,16 @@ subprojects {
         }
     }
     plugins.withId(androidKmpLibraryPluginId) {
-        extensions.getByType(KotlinMultiplatformExtension::class.java).targets.withType(
-            KotlinMultiplatformAndroidLibraryTarget::class.java
-        ).configureEach {
-            compileSdk = Cfg.compileSdk
-            minSdk = Cfg.minSdk
-            compilerOptions {
-                jvmTarget.set(Cfg.kotlinTargetVersion)
+        extensions
+            .getByType(KotlinMultiplatformExtension::class.java)
+            .targets
+            .withType(
+                KotlinMultiplatformAndroidLibraryTarget::class.java,
+            )
+            .configureEach {
+                compileSdk = Cfg.compileSdk
+                buildToolsVersion = Cfg.buildToolsVersion
+                minSdk = Cfg.minSdk
             }
-        }
     }
 }

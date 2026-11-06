@@ -11,22 +11,28 @@ import androidx.room3.Query
 import androidx.room3.Update
 import androidx.room3.Upsert
 import kotlinx.coroutines.flow.Flow
+import kotlinx.serialization.Serializable
 
 @Entity(
     tableName = "subs_global_group_config",
     primaryKeys = ["subs_id", "group_key"],
-    foreignKeys = [ForeignKey(
-        entity = SubsItem::class,
-        parentColumns = ["id"],
-        childColumns = ["subs_id"],
-        onDelete = ForeignKey.CASCADE,
-    )],
+    foreignKeys =
+        [
+            ForeignKey(
+                entity = SubsItem::class,
+                parentColumns = ["id"],
+                childColumns = ["subs_id"],
+                onDelete = ForeignKey.CASCADE,
+            ),
+        ],
 )
+@Serializable
 data class SubsGlobalGroupConfig(
     @ColumnInfo(name = "subs_id") override val subsId: Long,
     @ColumnInfo(name = "group_key") override val groupKey: Int,
     @ColumnInfo(name = "enable") override val enable: Boolean? = null,
     @ColumnInfo(name = "exclude", defaultValue = "") override val exclude: String = "",
+    @ColumnInfo(name = "match_any_app", defaultValue = "NULL") val matchAnyApp: Boolean? = null,
 ) : SubsGroupConfig {
     @Dao
     interface SubsGlobalGroupConfigDao {
@@ -36,34 +42,36 @@ data class SubsGlobalGroupConfig(
         @Query("SELECT * FROM subs_global_group_config WHERE subs_id=:subsId")
         fun queryBySubsId(subsId: Long): Flow<List<SubsGlobalGroupConfig>>
 
-        @Query("SELECT * FROM subs_global_group_config WHERE subs_id=:subsId AND group_key=:groupKey")
+        @Query(
+            "SELECT * FROM subs_global_group_config WHERE subs_id=:subsId AND group_key=:groupKey",
+        )
         fun queryConfig(subsId: Long, groupKey: Int): Flow<SubsGlobalGroupConfig?>
 
-        @Query("SELECT * FROM subs_global_group_config WHERE subs_id=:subsId AND group_key=:groupKey")
+        @Query(
+            "SELECT * FROM subs_global_group_config WHERE subs_id=:subsId AND group_key=:groupKey",
+        )
         suspend fun getConfig(subsId: Long, groupKey: Int): SubsGlobalGroupConfig?
 
         @Query("SELECT * FROM subs_global_group_config WHERE subs_id IN (:subsIds)")
         suspend fun queryBySubsIds(subsIds: List<Long>): List<SubsGlobalGroupConfig>
 
-        @Query("SELECT * FROM subs_global_group_config WHERE subs_id IN (SELECT id FROM subs_item WHERE enable = 1)")
+        @Query(
+            "SELECT * FROM subs_global_group_config WHERE subs_id IN (SELECT id FROM subs_item WHERE enable = 1)",
+        )
         fun queryUsedList(): Flow<List<SubsGlobalGroupConfig>>
 
-        @Upsert
-        suspend fun upsert(vararg objects: SubsGlobalGroupConfig)
+        @Upsert suspend fun upsert(vararg objects: SubsGlobalGroupConfig)
 
-        @Update
-        suspend fun update(vararg objects: SubsGlobalGroupConfig): Int
+        @Update suspend fun update(vararg objects: SubsGlobalGroupConfig): Int
 
         @Insert(onConflict = OnConflictStrategy.IGNORE)
         suspend fun insertOrIgnore(vararg objects: SubsGlobalGroupConfig): List<Long>
 
-        @Delete
-        suspend fun delete(vararg objects: SubsGlobalGroupConfig): Int
+        @Delete suspend fun delete(vararg objects: SubsGlobalGroupConfig): Int
 
-        @Query("SELECT * FROM subs_global_group_config WHERE subs_id IN (:subsIds)")
-        fun queryGlobalConfig(subsIds: List<Long>): Flow<List<SubsGlobalGroupConfig>>
-
-        @Query("DELETE FROM subs_global_group_config WHERE subs_id=:subsId AND group_key IN (:keys)")
+        @Query(
+            "DELETE FROM subs_global_group_config WHERE subs_id=:subsId AND group_key IN (:keys)",
+        )
         suspend fun deleteGroups(subsId: Long, keys: List<Int>): Int
     }
 }

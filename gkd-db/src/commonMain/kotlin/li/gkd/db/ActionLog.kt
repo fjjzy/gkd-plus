@@ -31,19 +31,15 @@ data class ActionLog(
     @ColumnInfo(name = "rule_key") val ruleKey: Int? = null,
 ) {
     @DeleteTable.Entries(
-        DeleteTable(tableName = "click_log")
+        DeleteTable(tableName = "click_log"),
     )
     class ActionLogSpec : AutoMigrationSpec
-
 
     @Dao
     @DaoReturnTypeConverters(PagingSourceDaoReturnTypeConverter::class)
     interface ActionLogDao {
 
-
-        @Insert
-        suspend fun insert(vararg objects: ActionLog): List<Long>
-
+        @Insert suspend fun insert(vararg objects: ActionLog): List<Long>
 
         @Query("DELETE FROM action_log WHERE subs_id IN (:subsIds)")
         suspend fun deleteBySubsId(vararg subsIds: Long): Int
@@ -51,18 +47,21 @@ data class ActionLog(
         @Query("SELECT * FROM action_log ORDER BY id DESC LIMIT 1000")
         fun query(): Flow<List<ActionLog>>
 
-        @Query("SELECT * FROM action_log ORDER BY id DESC ")
-        fun pagingSource(): PagingSource<Int, ActionLog>
+        @Query(
+            "SELECT * FROM action_log WHERE (:subsId IS NULL OR subs_id=:subsId) AND (:filterApps = 0 OR app_id IN (:appIds)) ORDER BY id DESC",
+        )
+        fun pagingSource(
+            subsId: Long? = null,
+            appIds: List<String> = emptyList(),
+            filterApps: Boolean = appIds.isNotEmpty(),
+        ): PagingSource<Int, ActionLog>
 
-        @Query("SELECT * FROM action_log WHERE subs_id=:subsId ORDER BY id DESC ")
-        fun pagingSubsSource(subsId: Long): PagingSource<Int, ActionLog>
+        @Query(
+            "SELECT app_id FROM action_log WHERE (:subsId IS NULL OR subs_id=:subsId) GROUP BY app_id ORDER BY MAX(id) DESC",
+        )
+        fun queryAppIds(subsId: Long?): Flow<List<String>>
 
-        @Query("SELECT * FROM action_log WHERE app_id=:appId ORDER BY id DESC ")
-        fun pagingAppSource(appId: String): PagingSource<Int, ActionLog>
-
-        @Query("SELECT COUNT(*) FROM action_log")
-        fun count(): Flow<Int>
-
+        @Query("SELECT COUNT(*) FROM action_log") fun count(): Flow<Int>
 
         @Query("SELECT * FROM action_log ORDER BY id DESC LIMIT 1")
         fun queryLatest(): Flow<ActionLog?>
@@ -78,35 +77,34 @@ data class ActionLog(
             AND cl.group_type = latest_log.group_type
             AND cl.group_key = latest_log.group_key
             AND cl.id = latest_log.max_id
-        """
+        """,
         )
         fun queryLatestByAppId(appId: String): Flow<List<ActionLog>>
-
 
         @Query(
             """
             DELETE FROM action_log
-            WHERE (
-                    SELECT COUNT(*)
-                    FROM action_log
-                ) > 500
-                AND id <= (
+            WHERE id <= (
                     SELECT id
                     FROM action_log
                     ORDER BY id DESC
                     LIMIT 1 OFFSET 500
                 )
-        """
+        """,
         )
         suspend fun deleteKeepLatest(): Int
 
         @Query("SELECT DISTINCT app_id FROM action_log ORDER BY id DESC")
         fun queryLatestUniqueAppIds(): Flow<List<String>>
 
-        @Query("SELECT DISTINCT app_id FROM action_log WHERE subs_id=:subsItemId AND group_type=${RuleGroupType.App} ORDER BY id DESC")
+        @Query(
+            "SELECT DISTINCT app_id FROM action_log WHERE subs_id=:subsItemId AND group_type=${RuleGroupType.App} ORDER BY id DESC",
+        )
         fun queryLatestUniqueAppIds(subsItemId: Long): Flow<List<String>>
 
-        @Query("SELECT DISTINCT app_id FROM action_log WHERE subs_id=:subsItemId AND group_key=:globalGroupKey AND group_type=${RuleGroupType.Global} ORDER BY id DESC")
+        @Query(
+            "SELECT DISTINCT app_id FROM action_log WHERE subs_id=:subsItemId AND group_key=:globalGroupKey AND group_type=${RuleGroupType.Global} ORDER BY id DESC",
+        )
         fun queryLatestUniqueAppIds(subsItemId: Long, globalGroupKey: Int): Flow<List<String>>
     }
 }

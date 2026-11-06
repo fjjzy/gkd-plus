@@ -1,0 +1,75 @@
+package li.gkd.app.settings
+
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import li.gkd.app.app.AppGroupFlags
+import li.gkd.app.app.AppSort
+import li.gkd.app.rule.RuleDisplayMode
+import li.gkd.app.rule.RuleSort
+import li.gkd.app.snapshot.SnapshotDisplayMode
+
+@Serializable
+data class SettingsStore(
+    val enableAutomator: Boolean = false,
+    val automatorMode: Int = AutomatorMode.A11y.value,
+    val enableMatch: Boolean = true,
+    val enableStatusService: Boolean = false,
+    val enableStatusOverlay: Boolean = true,
+    val excludeFromRecents: Boolean = false,
+    val captureScreenshot: Boolean = false,
+    val screenshotTargetAppId: String = "",
+    val screenshotEventSelector: String = "",
+    val httpServerPort: Int = 8888,
+    val updateSubsInterval: Long = SubscriptionUpdateInterval.Daily,
+    val captureVolumeChange: Boolean = false,
+    val toastWhenClick: Boolean = true,
+    val actionToast: String = "GKD",
+    val autoClearMemorySubs: Boolean = false,
+    val hideSnapshotStatusBar: Boolean = false,
+    val autoSaveSnapshotToDownloads: Boolean = false,
+    val enableDarkTheme: Boolean? = null,
+    val enableDynamicColor: Boolean = true,
+    val useSystemToast: Boolean = false,
+    val useCustomNotifText: Boolean = false,
+    val customNotifTitle: String = "GKD",
+    val customNotifText: String = $$"${i}全局/${k}应用/${u}规则/${n}触发",
+    val updateChannel: Int = UpdateChannel.Stable.value,
+    val appSort: Int = AppSort.ByUsedTime.value,
+    val showBlockApp: Boolean = true,
+    val appRuleSort: Int = RuleSort.ByDefault.value,
+    val appRuleSummaryDisplayMode: Int = RuleDisplayMode.Flat.value,
+    val subsAppRuleDisplayMode: Int = RuleDisplayMode.Flat.value,
+    val subsAppSort: Int = AppSort.ByUsedTime.value,
+    val subsCategorySort: Int = AppSort.ByUsedTime.value,
+    val subsAppShowUninstall: Boolean = false,
+    val subsAppGroupType: Int = AppGroupFlags.Installed,
+    val subsCategoryGroupType: Int = AppGroupFlags.Installed,
+    val subsAppShowBlock: Boolean = false,
+    val subsCategoryShowBlock: Boolean = false,
+    val subsExcludeSort: Int = AppSort.ByUsedTime.value,
+    val subsExcludeShowBlockApp: Boolean = true,
+    val subsExcludeShowInnerDisabledApp: Boolean = true,
+    val subsPowerWarn: Boolean = true,
+    val enableBlockA11yAppList: Boolean = false,
+    val blockA11yAppListFollowMatch: Boolean = true,
+    @SerialName("a11yAppSort") val serviceScopeAppSort: Int = AppSort.ByUsedTime.value,
+    val appGroupType: Int = AppGroupFlags.Installed,
+    @SerialName("a11yAppGroupType") val serviceScopeAppGroupType: Int = appGroupType,
+    val subsExcludeAppGroupType: Int = appGroupType,
+    val showDisabledRule: Boolean = true,
+    val snapshotDisplayMode: Int = SnapshotDisplayMode.ByTime.value,
+    val aiEnable: Boolean = false,
+    /** 点快照磁贴后跳过菜单，直接进入「我来选择」 */
+    val aiTileDirectPicker: Boolean = false,
+    /** 首次显示快照按钮时的「长按可关闭」提示是否已展示 */
+    val snapshotButtonHintShown: Boolean = false,
+    val aiConfig: AiConfig = AiConfig(),
+    /** 多选组件时「可以用第 N 个指代」的提示已展示次数；提醒两次后不再打扰 */
+    val aiMultiSelectHintCount: Int = 0,
+) {
+    val useA11y
+        get() = automatorMode == AutomatorMode.A11y.value
+
+    val useAutomation
+        get() = automatorMode == AutomatorMode.Automation.value
+}

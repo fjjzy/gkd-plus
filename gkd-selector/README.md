@@ -12,7 +12,7 @@ Node.js projects in this repository can depend on `@gkd-kit/selector` through `w
 pnpm fetch-selector-dist
 ```
 
-The command downloads the published npm package into a temporary directory, validates its name, version, JavaScript entry point, and type declaration, then replaces only the local ignored `dist` directory. It does not run automatically during dependency installation and does not modify Kotlin sources.
+The command downloads the published npm package into `.temp/selector-dist/download-*/` under the repository root, validates its name, version, JavaScript entry point, and type declaration, then replaces only the local ignored `dist` directory. It does not run automatically during dependency installation and does not modify Kotlin sources.
 
 When changing selector Kotlin code, run the regular build instead; it replaces `dist` with output from the local sources:
 
@@ -24,11 +24,11 @@ pnpm --dir gkd-selector build
 
 ## Release
 
-Publishing uses npm Trusted Publishing from `.github/workflows/Publish-Selector.yml`; no long-lived npm token is stored in GitHub. Configure the `@gkd-kit/selector` package on npm once with this GitHub trusted publisher:
+Publishing uses npm Trusted Publishing from `.github/workflows/publish-selector.yml`; no long-lived npm token is stored in GitHub. Configure the `@gkd-kit/selector` package on npm once with this GitHub trusted publisher:
 
 - Organization or user: `gkd-kit`
 - Repository: `gkd`
-- Workflow filename: `Publish-Selector.yml`
+- Workflow filename: `publish-selector.yml`
 - Allowed action: `npm publish`
 
 For each release, update `gkd-selector/package.json` to the intended stable version, commit and push it, then create a tag with the exact package name and version:
@@ -121,6 +121,16 @@ Enabling fast queries explicitly accepts an implementation-specific query order.
 
 `NodeAdapter.getFastQueryDescendants` on Kotlin and `JsNodeAdapter.getFastQueryDescendants` on JavaScript are correctness-sensitive optimization hooks. An override must return every descendant matching at least one supplied fast query and return each logical node at most once according to `getNodeKey`, but it does not need to preserve the order of `getDescendants`. Selector matching validates every candidate again, so an override may return false positives but must not omit candidates. Kotlin implementations return a `Sequence`; JavaScript implementations return an `Iterable` and can use a synchronous generator method. Both implementations should yield candidates incrementally so first-result helpers can stop before later fast queries run. A one-shot JavaScript iterable must be recreated on each hook call, and its generator must not own resources that require explicit closing.
 
+`selector.fastQueryList` exposes the engine's extracted candidate filters as an array in Kotlin
+and JavaScript. An empty collection means no fast-query filters are available. Returned
+collections are copies; modifying them does not change matching. `query.accepts(value)` tests
+a string attribute using the engine's comparison: exact equality for `Id` and `Vid`, or the
+configured operator for `Text`.
+
+For successful traces, `unit.queryNode` is the unit's starting candidate, which can differ
+from its `@` return target. `unit.fastQueryList` contains that unit's filters as a fresh array.
+These describe candidate eligibility, not proof that Android actually used a fast query.
+
 ## Type validation
 
 Use `selector.validateType(typeModel)` when selectors need to be checked against a host type model. `createDefaultSelectorTypeModel()` provides the built-in GKD model. JavaScript callers can construct a custom immutable model with `JsSelectorTypeModelBuilder`; its `property` and `method` functions accept `JsSelectorType` values created by that same builder.
@@ -128,8 +138,6 @@ Use `selector.validateType(typeModel)` when selectors need to be checked against
 `selector.validateType(typeModel)` is the fast validation path: it stops at the first error and returns `SelectorTypeResult`, so expected failures do not require `catch`. A failure contains one structured `SelectorTypeException`; reading its `value` throws that same exception instance.
 
 Editors and debugging tools can call `selector.getTypeErrors(typeModel)` to collect every independent type error, ordered by source position. A selector created by `Selector.parse` retains source positions, so its errors include exact ranges; a selector created by `Selector.compile` performs the same checks with `null` ranges. Syntax failure produces no selector and therefore cannot proceed to type checking.
-
-Type failures from selectors created by `Selector.parse` include an exact source range. Matching-only selectors created by `Selector.compile` do not retain positions, so their type failure range is `null`.
 
 ## Successful match trace
 

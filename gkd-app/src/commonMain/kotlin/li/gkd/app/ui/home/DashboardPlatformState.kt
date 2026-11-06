@@ -1,0 +1,68 @@
+package li.gkd.app.ui.home
+
+import li.gkd.app.permission.AppPermissionRestriction
+import li.gkd.app.priv.PrivilegeCapabilities
+import li.gkd.app.resources.*
+import li.gkd.app.settings.SettingsStore
+import li.gkd.app.ui.navigation.AppRoute
+import li.gkd.app.ui.navigation.PrivilegeServiceRoute
+import li.gkd.app.ui.navigation.WorkModeRoute
+import org.jetbrains.compose.resources.StringResource
+
+/** Values supplied by Android services or the Desktop Android simulator. */
+data class DashboardPlatformState(
+    val a11yRunning: Boolean,
+    val automationRunning: Boolean,
+    val a11yEnabled: Boolean,
+    val writeSecureSettings: Boolean,
+    val partiallyDisabled: Boolean,
+    val privilegeAvailable: Boolean,
+    val privilegeStatus: DashboardPrivilegeStatus,
+    val statusRunning: Boolean,
+    val activityRunning: Boolean,
+    val restricted: Boolean,
+    val topAppId: String,
+    val privilegeCapabilities: PrivilegeCapabilities? = null,
+    val appRestrictions: Set<AppPermissionRestriction> = emptySet(),
+) {
+    val serviceEnabled: Boolean
+        get() = a11yRunning || automationRunning
+
+    fun subtitle(
+        store: SettingsStore,
+    ): StringResource =
+        if (automationRunning) {
+            Res.string.automation_running
+        } else if (a11yRunning) {
+            Res.string.a11y_running
+        } else if (store.useA11y) {
+            when {
+                a11yEnabled -> Res.string.a11y_fault
+                !writeSecureSettings -> Res.string.a11y_unauthorized
+                store.enableAutomator && partiallyDisabled -> Res.string.a11y_partially_disabled
+                else -> Res.string.a11y_stopped
+            }
+        } else {
+            when {
+                !privilegeAvailable -> Res.string.automation_unauthorized
+                store.enableAutomator && partiallyDisabled ->
+                    Res.string.automation_partially_disabled
+                else -> Res.string.automation_stopped
+            }
+        }
+
+    fun authorizationRoute(
+        enable: Boolean,
+        store: SettingsStore,
+    ): AppRoute? =
+        when {
+            enable && store.useA11y && !writeSecureSettings -> WorkModeRoute
+            enable &&
+                !store.useA11y &&
+                (!privilegeAvailable || privilegeCapabilities?.restricted == true) ->
+                PrivilegeServiceRoute
+            else -> null
+        }
+}
+
+@androidx.compose.runtime.Composable expect fun dashboardPlatformState(): DashboardPlatformState

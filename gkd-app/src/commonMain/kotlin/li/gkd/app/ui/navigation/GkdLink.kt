@@ -1,0 +1,57 @@
+package li.gkd.app.ui.navigation
+
+import java.net.URI
+import java.net.URLDecoder
+
+sealed interface GkdLink {
+    data class Home(val tab: Int?) : GkdLink
+
+    data class Page(val route: AppRoute, val section: AdvancedSection? = null) : GkdLink
+
+    data object WeChatScanner : GkdLink
+
+    companion object {
+        fun parse(value: String): GkdLink? = runCatching {
+            val uri = URI(value)
+            fun query(name: String) =
+                uri.rawQuery
+                    ?.split('&')
+                    ?.firstOrNull { it.substringBefore('=') == name }
+                    ?.substringAfter('=', "")
+                    ?.let { URLDecoder.decode(it, "UTF-8") }
+            if (!uri.scheme.equals("gkd", ignoreCase = true)) null
+            else
+                when (uri.host) {
+                    "page" ->
+                        when (uri.path.orEmpty()) {
+                            "" ->
+                                Home(
+                                    query("tab")?.toIntOrNull(),
+                                )
+
+                            "/1" ->
+                                if (query("section") == "diagnostics") Page(MatchDebugRoute)
+                                else
+                                    Page(
+                                        AdvancedPageRoute,
+                                        section =
+                                            query("section")?.let { value ->
+                                                AdvancedSection.entries.firstOrNull {
+                                                    it.linkValue == value
+                                                }
+                                            },
+                                    )
+                            "/2" -> Page(SnapshotPageRoute)
+                            "/matching-diagnostics" -> Page(MatchDebugRoute)
+                            "/3",
+                            "/4" -> Page(PrivilegeServiceRoute)
+                            else -> null
+                        }
+
+                    "invoke" -> if (uri.path == "/1") WeChatScanner else null
+                    else -> null
+                }
+        }
+            .getOrNull()
+    }
+}
