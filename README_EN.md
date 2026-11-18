@@ -52,6 +52,18 @@ GKD is a custom Android screen-clicking app built on [advanced selectors](https:
 - "Test connection" in settings
 - Recommended model: Deepseek-v4-flash
 
+### Free Tokens for AI Rules (kept up to date)
+
+AI rules need a model API key. These platforms hand out free credit on signup — enough for everyday rule generation (links include referral codes; both sides may get a little extra):
+
+- **[Zhipu GLM](https://www.bigmodel.cn/invite?icode=yCvPh23nfZNsM5u%2FU%2FCgqf2gad6AKpjZefIo3dVEQyA%3D)** — 20M free tokens on signup
+- **[SiliconFlow](https://cloud.siliconflow.cn/i/8H1WJOXd)** — ¥16 free credit on signup
+- **[Qiniu Cloud](https://s.qiniu.com/JnyYjq)** — Conatus Free: 100M tokens per day free until the end of November, plus 3M tokens on signup
+- **[Alibaba Cloud Bailian](https://bailian.console.aliyun.com/cn-beijing/costing-balance/free-quota)** — 1M free tokens per model, reset every 90 days
+- **[Kimi](https://platform.kimi.com/console/account)** — ¥15 free credit on signup (about 1M tokens)
+
+Once you have a key, open `AI Rule Workbench - AI Rule Settings`, paste it in, and tap "Test connection".
+
 ### AI Configuration Backup and Restore
 
 - Large model settings, including API URL, API key, and model name, are included in backup/import flows
