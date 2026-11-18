@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -48,6 +49,20 @@ import li.gkd.app.ui.share.launchUiAction
 import li.gkd.app.ui.style.titleItemPadding
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Card
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import li.gkd.app.ui.platform.openAutoStartSettings
+import li.gkd.app.ui.style.surfaceCardColors
+import li.gkd.app.ui.style.itemHorizontalPadding
+import li.gkd.app.ui.style.itemVerticalPadding
+import li.gkd.app.util.throttle
 
 @Composable
 fun KeepAlivePage() {
@@ -241,7 +256,111 @@ fun KeepAlivePage() {
                 title = stringResource(Res.string.keep_alive_title),
                 onClick = { vm.setShowKeepAlive(true) },
             )
+            Text(
+                stringResource(Res.string.keep_alive_guide_intro),
+                modifier = Modifier.titleItemPadding(),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            KeepAliveGuideCard(
+                imageVector = GkIcons.PowerSettingsNew,
+                title = stringResource(Res.string.keep_alive_guide_autostart),
+                description = stringResource(Res.string.keep_alive_guide_autostart_description),
+                onClickLabel = stringResource(Res.string.keep_alive_guide_autostart_open),
+                onClick = { scope.launchUiAction { openAutoStartSettings() } },
+            )
+            KeepAliveGuideCard(
+                imageVector = GkIcons.BatteryFull,
+                title = stringResource(Res.string.keep_alive_guide_battery),
+                description = stringResource(Res.string.keep_alive_guide_battery_description),
+                onClickLabel = stringResource(Res.string.keep_alive_guide_battery_open),
+                onClick = {
+                    scope.launchUiAction {
+                        mainVm.permissions.ensurePermissions(AppPermission.IgnoreBatteryOptimizations)
+                    }
+                },
+                satisfied = batteryUnrestricted,
+            )
+            KeepAliveGuideCard(
+                imageVector = GkIcons.Memory,
+                title = stringResource(Res.string.keep_alive_guide_background),
+                description = stringResource(Res.string.keep_alive_guide_background_description),
+                onClickLabel = stringResource(Res.string.keep_alive_guide_background_open),
+                onClick = ::openAppDetails,
+            )
+            KeepAliveGuideCard(
+                imageVector = GkIcons.Lock,
+                title = stringResource(Res.string.keep_alive_guide_recents),
+                description = stringResource(Res.string.keep_alive_guide_recents_description),
+                onClickLabel = stringResource(Res.string.keep_alive_guide_recents_open),
+                onClick = { scope.launchUiAction { openRecents() } },
+            )
+            KeepAliveGuideCard(
+                imageVector = GkIcons.VerifiedUser,
+                title = stringResource(Res.string.keep_alive_guide_a11y_boot),
+                description = stringResource(Res.string.keep_alive_guide_a11y_boot_description),
+                onClickLabel = stringResource(Res.string.keep_alive_guide_a11y_boot_open),
+                onClick = { mainVm.navigator.navigate(PrivilegeServiceRoute) },
+                satisfied = platform.writeSecureSettings,
+            )
             GkPageBottomSpace()
+        }
+    }
+}
+
+@Composable
+private fun KeepAliveGuideCard(
+    imageVector: ImageVector,
+    title: String,
+    description: String,
+    onClickLabel: String,
+    onClick: () -> Unit,
+    satisfied: Boolean = false,
+) {
+    val enabledText = stringResource(Res.string.keep_alive_guide_enabled)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = surfaceCardColors,
+    ) {
+        Row(
+            modifier =
+                Modifier.fillMaxWidth()
+                    .semantics(mergeDescendants = true) {
+                        if (satisfied) {
+                            stateDescription = enabledText
+                        }
+                    }
+                    .clickable(onClickLabel = onClickLabel, onClick = throttle(onClick))
+                    .padding(itemVerticalPadding),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            GkIcon(
+                imageVector = imageVector,
+                modifier =
+                    Modifier.clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .padding(8.dp)
+                        .size(24.dp),
+                tint = MaterialTheme.colorScheme.primary,
+                contentDescription = null,
+            )
+            Spacer(modifier = Modifier.width(itemHorizontalPadding))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = title, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            GkIcon(
+                imageVector = if (satisfied) GkIcons.Check else GkIcons.KeyboardArrowRight,
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                contentDescription = null,
+            )
         }
     }
 }
