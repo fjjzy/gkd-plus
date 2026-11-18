@@ -17,10 +17,10 @@
     <string name="global_rule_default_apps_disabled">Off by default</string>
     <string name="a11y_about">About accessibility</string>
     <string name="a11y_automation_mode_notice">This app uses automation. Accessibility will be turned off automatically.</string>
-    <string name="a11y_background_running_warning">Keep GKD running in the background after stopping the service. Otherwise, the system may suspend or terminate it and prevent the service from restarting.</string>
+    <string name="a11y_background_running_warning">Keep GKD-Plus running in the background after stopping the service. Otherwise, the system may suspend or terminate it and prevent the service from restarting.</string>
     <string name="a11y_enable">Enable accessibility</string>
-    <string name="a11y_enable_guide_title">Enable GKD accessibility</string>
-    <string name="a11y_enable_guide_description">System accessibility settings will open. Follow these steps:\n\n1. Find GKD in the service list\n2. Turn it on and confirm the system prompt\n3. Return to GKD</string>
+    <string name="a11y_enable_guide_title">Enable GKD-Plus accessibility</string>
+    <string name="a11y_enable_guide_description">System accessibility settings will open. Follow these steps:\n\n1. Find GKD-Plus in the service list\n2. Turn it on and confirm the system prompt\n3. Return to GKD-Plus</string>
     <string name="a11y_enable_failed">Failed to enable accessibility</string>
     <string name="a11y_event_logs">Accessibility event logs</string>
     <string name="a11y_events_recording">Recording accessibility events</string>
@@ -43,7 +43,7 @@
     <string name="a11y_not_running">Accessibility is not running</string>
     <string name="a11y_touch_stutter">Brief touch input interruption</string>
     <string name="a11y_unauthorized">Accessibility not authorized</string>
-    <string name="a11y_usage_description">GKD uses the system Accessibility API to read screen information and perform automated actions based on your subscription rules.</string>
+    <string name="a11y_usage_description">GKD-Plus uses the system Accessibility API to read screen information and perform automated actions based on your subscription rules.</string>
     <string name="a11y_whitelist">Accessibility allowlist</string>
     <string name="a11y_whitelist_follow_apps">Following the app allowlist</string>
     <string name="a11y_whitelist_independent">Using a separate accessibility allowlist</string>
@@ -184,7 +184,7 @@
     <string name="automation_privilege_required_description">Automation mode requires a connection to the privileged service. Start it on the privileged service page, then return here to select automation mode.</string>
     <string name="automation_running">Automation is running</string>
     <string name="automation_service_occupied">Automation service is in use</string>
-    <string name="automation_service_occupied_description">Another process or app is using the automation service. Only one client can use it at a time.\n\nAndroid does not allow GKD to identify which process or app is using the service.\n\nStop automation tasks or test services in other tools, then try again. If you cannot identify the source, restart your device before starting GKD automation.</string>
+    <string name="automation_service_occupied_description">Another process or app is using the automation service. Only one client can use it at a time.\n\nAndroid does not allow GKD-Plus to identify which process or app is using the service.\n\nStop automation tasks or test services in other tools, then try again. If you cannot identify the source, restart your device before starting GKD-Plus automation.</string>
     <string name="automation_start_failed">Failed to start automation: %1$s</string>
     <string name="automation_started">Automation started</string>
     <string name="automation_state_check_failed">Failed to check automation status: %1$s</string>
@@ -211,7 +211,7 @@
     <string name="backup_version_unsupported">Unsupported backup version: %1$s. Update the app and try again.</string>
     <string name="battery_optimization_settings_open">Open battery optimization settings</string>
     <string name="battery_optimization_ignore">Ignore battery optimization</string>
-    <string name="battery_optimization_dashboard_notice">Android may freeze GKD in the background and delay rule triggers</string>
+    <string name="battery_optimization_dashboard_notice">Android may freeze GKD-Plus in the background and delay rule triggers</string>
     <string name="beta_channel_warning">Beta releases receive updates sooner\nbut may be unstable and contain more bugs.\nUse with caution.</string>
     <string name="build_channel">Build channel</string>
     <string name="categories_empty">No categories</string>
@@ -309,7 +309,7 @@
     <string name="dialog_close_description">Close %1$s</string>
     <string name="disabled">Disabled</string>
     <string name="documentation_description">User guide and FAQ · GKD.LI</string>
-    <string name="documentation_open">Open GKD documentation</string>
+    <string name="documentation_open">Open GKD-Plus documentation</string>
     <string name="donate">Donate</string>
     <string name="download_abort">Cancel download</string>
     <string name="download_complete">Download complete</string>
@@ -348,11 +348,11 @@
     <string name="external_call_notification_description">Closes automatically when the task finishes</string>
     <string name="external_call_processing">Processing external request</string>
     <string name="external_call_unknown">Unknown request: method=%1$s data=%2$s</string>
-    <string name="feedback_app_issue_prefix">If you are sure this is an issue with GKD itself</string>
+    <string name="feedback_app_issue_prefix">If you are sure this is an issue with GKD-Plus itself</string>
     <string name="feedback_continue_suffix">, continue below to report it</string>
     <string name="feedback_notice">Before reporting</string>
     <string name="feedback_report">Report an issue</string>
-    <string name="feedback_scope">GKD does not include any rules by default. This channel only accepts feedback about the app itself.</string>
+    <string name="feedback_scope">GKD-Plus does not include any rules by default. This channel only accepts feedback about the app itself.</string>
     <string name="feedback_subscription_notice">First check whether the issue comes from a third-party rule subscription. If so, report it to the rule provider instead.</string>
     <string name="feedback_thanks_prefix">Thank you for taking the time to report an issue. </string>
     <string name="feedback_title">Feedback</string>
@@ -368,7 +368,7 @@
     <string name="github_cookie_expired">Cookie has expired. Please replace it.</string>
     <string name="github_cookie_input_hint">Enter GitHub Cookie</string>
     <string name="github_cookie_label">GitHub Cookie</string>
-    <string name="gkd_learn_more">Learn about GKD</string>
+    <string name="gkd_learn_more">Learn about GKD-Plus</string>
     <string name="global_rule_add">Add global rules</string>
     <string name="global_rule_app_switch_batch_confirmation">Apply “%2$s” to the %1$s selected apps?</string>
     <string name="global_rule_app_switch_set">Set app toggles</string>
@@ -546,7 +546,7 @@
     <string name="progress_fraction">%1$s / %2$s</string>
     <string name="query_apps_permission_notice">Grant “Read app list” permission\nto display all apps</string>
     <string name="recents_open">Open recent tasks</string>
-    <string name="recents_lock_manual_hint">Open recent tasks and lock the GKD task card manually</string>
+    <string name="recents_lock_manual_hint">Open recent tasks and lock the GKD-Plus task card manually</string>
     <string name="recents_lock">Lock in recent tasks</string>
     <string name="recents_lock_manual_description">Device support and the current setting cannot be detected. If recent tasks supports locking apps, lock this app manually. Otherwise, skip this step.</string>
     <string name="remote_category_delete_unsupported">Cannot delete categories in remote subscriptions</string>
@@ -884,7 +884,7 @@
     <string name="target_app_id_hint">Enter target app ID</string>
     <string name="template_text_input_hint">Enter text; template variables are supported</string>
     <string name="terms_accept_conjunction"> and </string>
-    <string name="terms_accept_prefix">Welcome to GKD! To continue, read and accept the </string>
+    <string name="terms_accept_prefix">Welcome to GKD-Plus! To continue, read and accept the </string>
     <string name="terms_accept_suffix">. Please read them carefully.</string>
     <string name="terms_notice">Usage notice</string>
     <string name="terms_of_use">Terms of use</string>
@@ -1005,7 +1005,7 @@
     <string name="version_info">Version information</string>
     <string name="version_name">Version name</string>
     <string name="version_prefixed">v%1$s</string>
-    <string name="webview_outdated_notice">Your system WebView version (%1$s) is outdated and may not display the documentation correctly.\n\nUpdate WebView and restart GKD, or use the top-right menu to open the page in an external browser.\n\nIgnore this notice if the documentation displays correctly.</string>
+    <string name="webview_outdated_notice">Your system WebView version (%1$s) is outdated and may not display the documentation correctly.\n\nUpdate WebView and restart GKD-Plus, or use the top-right menu to open the page in an external browser.\n\nIgnore this notice if the documentation displays correctly.</string>
     <string name="webview_reload">Reload page</string>
     <string name="wechat_unavailable">Check whether WeChat is installed and enabled</string>
     <string name="whitelist_add">Add to allowlist</string>
@@ -1041,9 +1041,9 @@
     <string name="touch_optimization_service_impact">Features that depend on this service may be affected</string>
     <string name="touch_optimization_confirm_multiple">Stop %1$s gesture services?</string>
     <string name="touch_optimization_close_count">Stop %1$s</string>
-    <string name="touch_optimization_keep_gkd">GKD services will keep running</string>
+    <string name="touch_optimization_keep_gkd">GKD-Plus services will keep running</string>
     <string name="touch_optimization_privilege_title">Privileged service recommended</string>
-    <string name="touch_optimization_privilege_description">Connect the privileged service to let GKD run rules without accessibility gestures, reducing touch stutter.</string>
+    <string name="touch_optimization_privilege_description">Connect the privileged service to let GKD-Plus run rules without accessibility gestures, reducing touch stutter.</string>
     <string name="touch_optimization_system_settings">Open system settings</string>
     <string name="touch_optimization_close_failed">Could not stop the selected gesture services</string>
     <string name="partial_disable_intro">Automatically stop accessibility in allowlisted apps</string>
@@ -1148,7 +1148,7 @@
     <string name="simulation_accessibility_enabled">System accessibility toggle (simulated; may be enabled while disconnected)</string>
     <string name="snapshot_share_preparing">Preparing to share</string>
     <string name="external_calls_title">External calls</string>
-    <string name="external_calls_notice">Call GKD with shell commands. Copy the command for the action you need.</string>
+    <string name="external_calls_notice">Call GKD-Plus with shell commands. Copy the command for the action you need.</string>
     <string name="external_calls_snapshot">Capture snapshot</string>
     <string name="external_calls_snapshot_hint">Save node information and a screenshot of the current screen</string>
     <string name="external_calls_token_title">Access token</string>
@@ -1158,7 +1158,7 @@
     <string name="external_calls_reset_notice">Resetting immediately invalidates the old token and any copied commands</string>
     <string name="external_calls_invalid_token">External call rejected: token missing or invalid</string>
     <string name="quick_settings_tiles_title">Quick Settings tiles</string>
-    <string name="quick_settings_tiles_guide">Pull down the notification shade, expand Quick Settings, enter edit mode, and drag the GKD tiles you need into the panel</string>
+    <string name="quick_settings_tiles_guide">Pull down the notification shade, expand Quick Settings, enter edit mode, and drag the GKD-Plus tiles you need into the panel</string>
     <string name="quick_settings_tile_toggle">Toggle</string>
     <string name="quick_settings_tile_single_action">Single action</string>
     <string name="quick_settings_tile_capture_title">Capture snapshot</string>
@@ -1213,7 +1213,7 @@
     <string name="companion_scope">Companion accessibility</string>
     <string name="companion_paused_apps_title">Pause companion</string>
     <string name="companion_paused_apps_description">In automation mode, pause companion accessibility in the selected apps to avoid accessibility detection notices caused by the companion service</string>
-    <string name="companion_help_description">Companion accessibility helps automation work in some apps and helps keep GKD running in the background. GKD starts and stops it automatically.\n\nIt is a specially configured lightweight accessibility service with negligible overhead in everyday use.\n\nIn automation mode, if an app detects accessibility, select it under Pause companion. The companion service pauses when you enter that app and resumes when you leave.</string>
+    <string name="companion_help_description">Companion accessibility helps automation work in some apps and helps keep GKD-Plus running in the background. GKD-Plus starts and stops it automatically.\n\nIt is a specially configured lightweight accessibility service with negligible overhead in everyday use.\n\nIn automation mode, if an app detects accessibility, select it under Pause companion. The companion service pauses when you enter that app and resumes when you leave.</string>
     <string name="snapshot_node_overlap">%1$s overlapping nodes</string>
     <string name="snapshot_node_overlap_details">#%1$s · %2$s</string>
     <string name="snapshot_node_show_tree">Show node tree</string>
@@ -1274,7 +1274,7 @@
 <string name="dashboard_simple_rule_guide_step1">1. Open the "Apps" tab at the bottom and pick the app</string>
 <string name="dashboard_simple_rule_guide_step2">2. In that app, tap the plus button at the bottom right</string>
 <string name="dashboard_simple_rule_guide_step3">3. Choose "Add simple rule"</string>
-<string name="dashboard_simple_rule_guide_step4">4. Fill in the dialog locator and close action; GKD then closes the dialog automatically, like LiftJava</string>
+<string name="dashboard_simple_rule_guide_step4">4. Fill in the dialog locator and close action; GKD-Plus then closes the dialog automatically, like LiftJava</string>
 <string name="rule_add_simple">Add simple rule</string>
 <string name="rule_add_full">Add full rule</string>
 <string name="update_quark">Quark Drive</string><string name="ai_thinking_auto">Off automatically (by model name)</string>
@@ -1288,23 +1288,23 @@
 <string name="ai_rule_not_working_feedback">The rule didn't work, please regenerate</string>
 <string name="ai_conversation_empty_hint">No conversation yet. Ask me to generate a rule from the snapshot, or select components first and describe what you want.</string>
 <string name="ai_conversation_generate">Generate a rule for me</string>
-<string name="keep_alive_guide_title">GKD keep-alive guide</string>
+<string name="keep_alive_guide_title">GKD-Plus keep-alive guide</string>
 <string name="keep_alive_guide_subtitle">Autostart, battery optimization, background running and boot autostart</string>
-<string name="keep_alive_guide_open">Open the GKD keep-alive guide</string>
-<string name="keep_alive_guide_intro">The settings below reduce the chance of GKD being cleared by the system. Enable them as needed.</string>
+<string name="keep_alive_guide_open">Open the GKD-Plus keep-alive guide</string>
+<string name="keep_alive_guide_intro">The settings below reduce the chance of GKD-Plus being cleared by the system. Enable them as needed.</string>
 <string name="keep_alive_guide_autostart">Allow the app to autostart</string>
-<string name="keep_alive_guide_autostart_description">Allow GKD to start on boot or in the background in system settings</string>
+<string name="keep_alive_guide_autostart_description">Allow GKD-Plus to start on boot or in the background in system settings</string>
 <string name="keep_alive_guide_autostart_open">Open autostart settings</string>
 <string name="keep_alive_guide_autostart_fallback">No autostart settings page found; app details opened instead</string>
-<string name="keep_alive_guide_autostart_fallback_oppo">ColorOS does not expose an autostart page. System settings opened; search for "Autostart" at the top and allow GKD there</string>
+<string name="keep_alive_guide_autostart_fallback_oppo">ColorOS does not expose an autostart page. System settings opened; search for "Autostart" at the top and allow GKD-Plus there</string>
 <string name="keep_alive_guide_battery">Ignore battery optimization</string>
-<string name="keep_alive_guide_battery_description">Keep the system from sleeping GKD's background services after the screen turns off</string>
+<string name="keep_alive_guide_battery_description">Keep the system from sleeping GKD-Plus's background services after the screen turns off</string>
 <string name="keep_alive_guide_battery_open">Request ignoring battery optimization</string>
 <string name="keep_alive_guide_background">Allow running in the background</string>
 <string name="keep_alive_guide_background_description">Set it to unrestricted under "Battery usage" in app details</string>
 <string name="keep_alive_guide_background_open">Open app details</string>
 <string name="keep_alive_guide_recents">Lock task</string>
-<string name="keep_alive_guide_recents_description">Lock GKD in recents so it survives one-tap cleanup</string>
+<string name="keep_alive_guide_recents_description">Lock GKD-Plus in recents so it survives one-tap cleanup</string>
 <string name="keep_alive_guide_recents_open">Open recents</string>
 <string name="keep_alive_guide_a11y_boot">Accessibility autostart on boot</string>
 <string name="keep_alive_guide_a11y_boot_description">Authorize once with Shizuku (no root) or root to restore accessibility services after reboot</string>

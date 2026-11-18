@@ -19,8 +19,8 @@
     <string name="a11y_automation_mode_notice">当前应用使用自动化，无障碍将自动关闭</string>
     <string name="a11y_background_running_warning">必须确保服务关闭后的持续后台运行，否则会被系统暂停或结束运行导致重启失败</string>
     <string name="a11y_enable">开启无障碍</string>
-    <string name="a11y_enable_guide_title">开启 GKD 无障碍</string>
-    <string name="a11y_enable_guide_description">接下来将打开系统无障碍设置，请按以下步骤操作：\n\n1. 在服务列表中找到「GKD」\n2. 打开开关，并确认系统提示\n3. 返回 GKD</string>
+    <string name="a11y_enable_guide_title">开启 GKD-Plus 无障碍</string>
+    <string name="a11y_enable_guide_description">接下来将打开系统无障碍设置，请按以下步骤操作：\n\n1. 在服务列表中找到「GKD-Plus」\n2. 打开开关，并确认系统提示\n3. 返回 GKD-Plus</string>
     <string name="a11y_enable_failed">开启无障碍失败</string>
     <string name="a11y_event_logs">无障碍事件日志</string>
     <string name="a11y_events_recording">无障碍事件记录中</string>
@@ -43,7 +43,7 @@
     <string name="a11y_not_running">无障碍未运行</string>
     <string name="a11y_touch_stutter">短暂触摸卡顿</string>
     <string name="a11y_unauthorized">无障碍未授权</string>
-    <string name="a11y_usage_description">GKD 请求使用系统「无障碍 API」获取屏幕信息, 以此基于用户自定义订阅规则执行自动化操作</string>
+    <string name="a11y_usage_description">GKD-Plus 请求使用系统「无障碍 API」获取屏幕信息, 以此基于用户自定义订阅规则执行自动化操作</string>
     <string name="a11y_whitelist">无障碍白名单</string>
     <string name="a11y_whitelist_follow_apps">已设置为跟随应用白名单</string>
     <string name="a11y_whitelist_independent">已设置为独立无障碍白名单</string>
@@ -184,7 +184,7 @@
     <string name="automation_privilege_required_description">自动化模式需要连接特权服务才能使用。请前往特权服务页面开启服务，完成后返回此页选择自动化模式</string>
     <string name="automation_running">自动化正在运行</string>
     <string name="automation_service_occupied">自动化服务被占用</string>
-    <string name="automation_service_occupied_description">自动化服务已被其他进程或应用占用，无法启动。此服务同一时间只能由一个使用方运行。\n\n由于 Android 系统限制，GKD 无法获知具体是哪个进程或应用占用了该服务。\n\n请停止其他工具正在运行的自动化任务或测试服务，然后重试。若无法确定占用来源，可尝试重启设备后再启动 GKD 自动化</string>
+    <string name="automation_service_occupied_description">自动化服务已被其他进程或应用占用，无法启动。此服务同一时间只能由一个使用方运行。\n\n由于 Android 系统限制，GKD-Plus 无法获知具体是哪个进程或应用占用了该服务。\n\n请停止其他工具正在运行的自动化任务或测试服务，然后重试。若无法确定占用来源，可尝试重启设备后再启动 GKD-Plus 自动化</string>
     <string name="automation_start_failed">自动化启动失败：%1$s</string>
     <string name="automation_started">自动化已启动</string>
     <string name="automation_state_check_failed">自动化状态检测失败：%1$s</string>
@@ -211,7 +211,7 @@
     <string name="backup_version_unsupported">不支持的备份版本: %1$s，请升级应用后重试</string>
     <string name="battery_optimization_settings_open">打开忽略电池优化设置页面</string>
     <string name="battery_optimization_ignore">忽略电池优化</string>
-    <string name="battery_optimization_dashboard_notice">系统可能在后台冻结 GKD，导致规则无法及时触发</string>
+    <string name="battery_optimization_dashboard_notice">系统可能在后台冻结 GKD-Plus，导致规则无法及时触发</string>
     <string name="beta_channel_warning">测试版本渠道更新快\n但不稳定可能存在较多BUG\n请谨慎使用</string>
     <string name="build_channel">构建渠道</string>
     <string name="categories_empty">暂无类别</string>
@@ -309,7 +309,7 @@
     <string name="dialog_close_description">关闭%1$s</string>
     <string name="disabled">已禁用</string>
     <string name="documentation_description">使用指南与常见问题 · GKD.LI</string>
-    <string name="documentation_open">打开 GKD 文档页面</string>
+    <string name="documentation_open">打开 GKD-Plus 文档页面</string>
     <string name="donate">捐赠支持</string>
     <string name="download_abort">终止下载</string>
     <string name="download_complete">下载完毕</string>
@@ -348,11 +348,11 @@
     <string name="external_call_notification_description">任务完成后自动关闭</string>
     <string name="external_call_processing">正在处理外部调用</string>
     <string name="external_call_unknown">未知调用: method=%1$s data=%2$s</string>
-    <string name="feedback_app_issue_prefix">如果您已经确信是 GKD 应用本体的问题</string>
+    <string name="feedback_app_issue_prefix">如果您已经确信是 GKD-Plus 应用本体的问题</string>
     <string name="feedback_continue_suffix">，可点击下方继续反馈</string>
     <string name="feedback_notice">反馈须知</string>
     <string name="feedback_report">问题反馈</string>
-    <string name="feedback_scope">GKD 默认不携带任何规则，只接受应用本体功能相关的反馈</string>
+    <string name="feedback_scope">GKD-Plus 默认不携带任何规则，只接受应用本体功能相关的反馈</string>
     <string name="feedback_subscription_notice">请先判断是不是第三方规则订阅的问题，如果是，您应该向规则提供者反馈，而不是在此处反馈</string>
     <string name="feedback_thanks_prefix">感谢您愿意花时间反馈，</string>
     <string name="feedback_title">反馈</string>
@@ -368,7 +368,7 @@
     <string name="github_cookie_expired">检测到 cookie 失效, 请更换</string>
     <string name="github_cookie_input_hint">请输入 Github Cookie</string>
     <string name="github_cookie_label">GitHub Cookie</string>
-    <string name="gkd_learn_more">了解 GKD</string>
+    <string name="gkd_learn_more">了解 GKD-Plus</string>
     <string name="global_rule_add">添加全局规则</string>
     <string name="global_rule_app_switch_batch_confirmation">是否对所选 %1$s 个应用执行%2$s？</string>
     <string name="global_rule_app_switch_set">设置应用开关</string>
@@ -534,7 +534,7 @@
     <string name="privilege_service_connecting">正在连接特权服务...</string>
     <string name="privilege_service_connection_lost">特权服务连接已中断，请检查</string>
     <string name="privilege_service_disconnected">特权服务已断开</string>
-    <string name="privilege_service_help_description">此页面用于启动和管理特权服务。连接后，可为 GKD 提供自动化、必要权限授予等需要系统级能力的功能；断开后，依赖特权服务的功能将不可用</string>
+    <string name="privilege_service_help_description">此页面用于启动和管理特权服务。连接后，可为 GKD-Plus 提供自动化、必要权限授予等需要系统级能力的功能；断开后，依赖特权服务的功能将不可用</string>
     <string name="privilege_service_open">前往特权服务页面</string>
     <string name="privilege_service_project_prefix">特权服务基于开源项目 </string>
     <string name="privilege_service_project_suffix"> (自有特权运行时) 实现不依赖外部授权器提权</string>
@@ -546,7 +546,7 @@
     <string name="progress_fraction">%1$s / %2$s</string>
     <string name="query_apps_permission_notice">如需显示所有应用\n请授予「读取应用列表权限」</string>
     <string name="recents_open">打开最近任务</string>
-    <string name="recents_lock_manual_hint">请手动打开最近任务界面，锁定 GKD 的任务卡片</string>
+    <string name="recents_lock_manual_hint">请手动打开最近任务界面，锁定 GKD-Plus 的任务卡片</string>
     <string name="recents_lock">在「最近任务」锁定</string>
     <string name="recents_lock_manual_description">无法检测设备是否支持及当前设置状态。若最近任务界面提供锁定功能，请手动锁定本应用；没有此选项可跳过。</string>
     <string name="remote_category_delete_unsupported">远程订阅类别不可删除</string>
@@ -884,7 +884,7 @@
     <string name="target_app_id_hint">请输入目标应用ID</string>
     <string name="template_text_input_hint">请输入内容，支持变量替换</string>
     <string name="terms_accept_conjunction">」和「</string>
-    <string name="terms_accept_prefix">感谢使用 GKD！您需要阅读并同意「</string>
+    <string name="terms_accept_prefix">感谢使用 GKD-Plus！您需要阅读并同意「</string>
     <string name="terms_accept_suffix">」才能继续使用, 请仔细阅读相关内容</string>
     <string name="terms_notice">使用声明</string>
     <string name="terms_of_use">使用协议</string>
@@ -999,7 +999,7 @@
     <string name="version_info">版本信息</string>
     <string name="version_name">版本名称</string>
     <string name="version_prefixed">v%1$s</string>
-    <string name="webview_outdated_notice">检测到您的系统内置浏览器版本(%1$s)过低, 可能无法正常浏览网页文档\n\n建议自行升级版本后重启 GKD 再查看文档, 或点击右上角后在外部浏览器打开查阅\n\n若能正常浏览文档请忽略此项提示</string>
+    <string name="webview_outdated_notice">检测到您的系统内置浏览器版本(%1$s)过低, 可能无法正常浏览网页文档\n\n建议自行升级版本后重启 GKD-Plus 再查看文档, 或点击右上角后在外部浏览器打开查阅\n\n若能正常浏览文档请忽略此项提示</string>
     <string name="webview_reload">刷新页面</string>
     <string name="wechat_unavailable">请检查微信是否安装或禁用</string>
     <string name="whitelist_add">加入白名单</string>
@@ -1035,9 +1035,9 @@
     <string name="touch_optimization_service_impact">关闭后，依赖这项服务的功能可能受影响</string>
     <string name="touch_optimization_confirm_multiple">关闭 %1$s 项手势服务？</string>
     <string name="touch_optimization_close_count">关闭 %1$s 项</string>
-    <string name="touch_optimization_keep_gkd">GKD 的服务将继续运行</string>
+    <string name="touch_optimization_keep_gkd">GKD-Plus 的服务将继续运行</string>
     <string name="touch_optimization_privilege_title">建议使用特权服务</string>
-    <string name="touch_optimization_privilege_description">连接特权服务后，GKD 可切换到无需无障碍手势的服务，减少触摸卡顿，同时继续运行规则。</string>
+    <string name="touch_optimization_privilege_description">连接特权服务后，GKD-Plus 可切换到无需无障碍手势的服务，减少触摸卡顿，同时继续运行规则。</string>
     <string name="touch_optimization_system_settings">前往系统设置</string>
     <string name="touch_optimization_close_failed">未能关闭所选手势服务</string>
     <string name="partial_disable_intro">在白名单应用内自动关闭无障碍服务</string>
@@ -1142,7 +1142,7 @@
     <string name="simulation_accessibility_enabled">无障碍系统开关（模拟，开启后可处于未连接状态）</string>
     <string name="snapshot_share_preparing">正在准备分享</string>
     <string name="external_calls_title">外部调用</string>
-    <string name="external_calls_notice">通过 Shell 命令调用 GKD，复制所需功能的命令即可</string>
+    <string name="external_calls_notice">通过 Shell 命令调用 GKD-Plus，复制所需功能的命令即可</string>
     <string name="external_calls_snapshot">抓取快照</string>
     <string name="external_calls_snapshot_hint">保存当前界面的节点信息及截图</string>
     <string name="external_calls_token_title">访问凭证</string>
@@ -1152,7 +1152,7 @@
     <string name="external_calls_reset_notice">重置后，旧 token 和已复制的调用命令将立即失效</string>
     <string name="external_calls_invalid_token">外部调用被拒绝：token 缺失或无效</string>
     <string name="quick_settings_tiles_title">通知栏快捷方式</string>
-    <string name="quick_settings_tiles_guide">下拉通知栏，展开快捷设置，进入编辑，将所需的 GKD 磁贴拖入面板</string>
+    <string name="quick_settings_tiles_guide">下拉通知栏，展开快捷设置，进入编辑，将所需的 GKD-Plus 磁贴拖入面板</string>
     <string name="quick_settings_tile_toggle">开关</string>
     <string name="quick_settings_tile_single_action">单次操作</string>
     <string name="quick_settings_tile_capture_title">捕获快照</string>
@@ -1207,7 +1207,7 @@
     <string name="companion_scope">伴生无障碍</string>
     <string name="companion_paused_apps_title">暂停伴生</string>
     <string name="companion_paused_apps_description">自动化模式下，进入勾选的应用时暂停伴生无障碍，可避免因伴生服务触发的无障碍检测提示</string>
-    <string name="companion_help_description">伴生无障碍帮助自动化在部分应用中正常运行，也有助于 GKD 在后台持续运行。GKD 会自动启停它\n\n它是特殊配置的轻量无障碍服务，日常运行开销可忽略不计\n\n自动化模式下，如果某个应用提示已开启无障碍，可以在「暂停伴生」中勾选它。进入该应用时暂停伴生，离开后恢复</string>
+    <string name="companion_help_description">伴生无障碍帮助自动化在部分应用中正常运行，也有助于 GKD-Plus 在后台持续运行。GKD-Plus 会自动启停它\n\n它是特殊配置的轻量无障碍服务，日常运行开销可忽略不计\n\n自动化模式下，如果某个应用提示已开启无障碍，可以在「暂停伴生」中勾选它。进入该应用时暂停伴生，离开后恢复</string>
     <string name="snapshot_node_overlap">此处有 %1$s 个层叠节点</string>
     <string name="snapshot_node_show_tree">显示节点树</string>
     <string name="snapshot_node_hide_tree">隐藏节点树</string>
@@ -1282,23 +1282,23 @@
 <string name="ai_rule_not_working_feedback">规则没生效，请重新生成</string>
 <string name="ai_conversation_empty_hint">还没有对话。可以直接让我根据快照生成规则，也可以先选组件再描述要求。</string>
 <string name="ai_conversation_generate">为我生成规则</string>
-<string name="keep_alive_guide_title">GKD 保活引导</string>
+<string name="keep_alive_guide_title">GKD-Plus 保活引导</string>
 <string name="keep_alive_guide_subtitle">自启动、电池优化、后台运行与开机自启</string>
-<string name="keep_alive_guide_open">打开 GKD 保活引导</string>
-<string name="keep_alive_guide_intro">以下设置可降低 GKD 被系统清理的概率，按需逐项开启。</string>
+<string name="keep_alive_guide_open">打开 GKD-Plus 保活引导</string>
+<string name="keep_alive_guide_intro">以下设置可降低 GKD-Plus 被系统清理的概率，按需逐项开启。</string>
 <string name="keep_alive_guide_autostart">允许软件自启动</string>
-<string name="keep_alive_guide_autostart_description">在系统设置中允许 GKD 开机或后台自启动</string>
+<string name="keep_alive_guide_autostart_description">在系统设置中允许 GKD-Plus 开机或后台自启动</string>
 <string name="keep_alive_guide_autostart_open">打开自启动设置</string>
 <string name="keep_alive_guide_autostart_fallback">未找到自启动设置页，已打开应用详情</string>
-<string name="keep_alive_guide_autostart_fallback_oppo">ColorOS 未开放自启动页，已打开系统设置，请在顶部搜索「自启动」后进入并允许 GKD</string>
+<string name="keep_alive_guide_autostart_fallback_oppo">ColorOS 未开放自启动页，已打开系统设置，请在顶部搜索「自启动」后进入并允许 GKD-Plus</string>
 <string name="keep_alive_guide_battery">忽略电池优化</string>
-<string name="keep_alive_guide_battery_description">避免系统在息屏后休眠 GKD 的后台服务</string>
+<string name="keep_alive_guide_battery_description">避免系统在息屏后休眠 GKD-Plus 的后台服务</string>
 <string name="keep_alive_guide_battery_open">申请忽略电池优化</string>
 <string name="keep_alive_guide_background">允许始终在后台运行</string>
 <string name="keep_alive_guide_background_description">在应用详情的「耗电管理」中设为不限制</string>
 <string name="keep_alive_guide_background_open">打开应用详情</string>
 <string name="keep_alive_guide_recents">锁定任务</string>
-<string name="keep_alive_guide_recents_description">在最近任务中锁定 GKD，避免被一键清理</string>
+<string name="keep_alive_guide_recents_description">在最近任务中锁定 GKD-Plus，避免被一键清理</string>
 <string name="keep_alive_guide_recents_open">打开最近任务</string>
 <string name="keep_alive_guide_a11y_boot">无障碍开机自启</string>
 <string name="keep_alive_guide_a11y_boot_description">用 Shizuku（免 Root）或 Root 授权一次，开机后自动恢复无障碍服务</string>
