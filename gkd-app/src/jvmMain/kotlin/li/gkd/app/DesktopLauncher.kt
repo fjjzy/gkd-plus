@@ -271,7 +271,7 @@ fun runDesktop(args: Array<String>) {
         }
         Window(
             onCloseRequest = requestExit,
-            title = "GKD",
+            title = "GKD-Plus",
             onKeyEvent = { event ->
                 !backDispatcher.hasOverlay && keyDispatcher.dispatch(event)
             },

@@ -17,6 +17,6 @@ actual val META: AppMeta by lazy {
         versionCode = properties.getProperty("versionCode").toInt(),
         versionName = properties.getProperty("versionName"),
         appId = "li.songe.gkd.desktop",
-        appName = "GKD",
+        appName = "GKD-Plus",
     )
 }
