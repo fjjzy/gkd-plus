@@ -28,7 +28,7 @@ Windows 绿色版脱离仓库运行时，以 `GKD.exe` 所在目录为根，沿�
 
 ## 应用存储布局
 
-Android 与 Desktop 共用 `AppStorageLayout`，宿主注入 files/cache/privateFiles 根目录。Desktop 的 `data/` 对应 Android 外部应用目录：
+Android 与 Desktop 共用 `AppStorageLayout`，宿主注入 files/cache/privateFiles 根目录。Android 自 v1.13.1 起数据根固定在 `app.filesDir`（内部存储），Desktop 的 `data/` 与之对应：
 
 | 相对 `data/` 的路径 | 消费者 |
 | --- | --- |

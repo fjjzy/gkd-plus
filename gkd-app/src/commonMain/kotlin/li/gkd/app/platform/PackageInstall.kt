@@ -19,6 +19,6 @@ expect fun privilegedPackageInstallCapability(): Flow<PackageInstallCapability>
 /** Success means the system reported installation success, including any required confirmation. */
 expect suspend fun installPackagePrivileged(
     file: File,
-    versionCode: Int,
+    versionName: String,
     host: UiHost,
 ): PlatformResult<Unit>

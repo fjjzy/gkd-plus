@@ -43,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -52,9 +53,13 @@ import li.gkd.app.ui.navigation.AiSnapshotPickerRoute
 import li.gkd.app.ui.navigation.AppRoute
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import li.gkd.app.resources.*
+import org.jetbrains.compose.resources.stringResource
 import li.gkd.app.ui.MainViewModel
 import li.gkd.app.ui.navigation.SubsAppGroupListRoute
 import li.gkd.app.settings.SettingsRepository
+import li.gkd.app.state.Loadable
+import li.gkd.app.subscription.SubscriptionRepository
 import li.gkd.app.ui.component.GkAlertDialog
 import li.gkd.app.ui.image.GkAppIcon
 import li.gkd.app.ui.platform.LocalUiHost
@@ -90,9 +95,40 @@ fun AiConversationPage(route: AiConversationRoute) {
     val shareScope = rememberCoroutineScope()
     val host = LocalUiHost.current
     val listState = rememberLazyListState()
+    // 点击「规则没生效」建议时发给模型的内容必须是已解析的文案
+    val retryFeedback = stringResource(Res.string.ai_rule_not_working_feedback)
     // 顶栏图标与「已加入本地规则」消息共用同一个跳转入口
     val openLocalRules: (String) -> Unit = { appId ->
         mainVm.navigator.navigate(SubsAppGroupListRoute(SubscriptionIds.LOCAL, appId))
+    }
+    // 点击「已加入本地规则」：定位到刚入库的规则组；规则已被删除时提示
+    val openAcceptedRule: (String, List<Int>) -> Unit = { appId, groupKeys ->
+        val ready = SubscriptionRepository.snapshotFlow.value as? Loadable.Ready
+        if (ready == null) {
+            // 订阅还没加载完，先按应用列表打开，不误报「规则已删除」
+            openLocalRules(appId)
+        } else {
+            val local = ready.value.subscriptions[SubscriptionIds.LOCAL]
+            val targetKey =
+                groupKeys.firstOrNull { key ->
+                    local?.apps.orEmpty().any { app ->
+                        app.id == appId && app.groups.any { it.key == key }
+                    }
+                }
+            when {
+                targetKey != null ->
+                    mainVm.navigator.navigate(
+                        SubsAppGroupListRoute(SubscriptionIds.LOCAL, appId, focusGroupKey = targetKey),
+                    )
+                else -> {
+                    // 规则被删除时也进入本地规则页，方便用户直接补充或调整
+                    if (groupKeys.isNotEmpty()) {
+                        toast(Res.string.ai_rule_deleted.getSync())
+                    }
+                    openLocalRules(appId)
+                }
+            }
+        }
     }
     // 进程被杀后会话会停在 generating，进来先尝试恢复
     LaunchedEffect(route.snapshotId) { vm.recoverInterruptedGeneration(route.snapshotId) }
@@ -221,10 +257,33 @@ fun AiConversationPage(route: AiConversationRoute) {
                     }
                 }
             } else {
+                // 空会话也要能一键开工，别让用户先想一句话再输入
+                if (current.messages.isEmpty()) {
+                    item(key = "empty-conversation") {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Text(
+                                text = stringResource(Res.string.ai_conversation_empty_hint),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                            )
+                            androidx.compose.material3.FilledTonalButton(
+                                onClick = throttle { vm.generateRule(route.snapshotId) },
+                            ) {
+                                Text(text = stringResource(Res.string.ai_conversation_generate))
+                            }
+                        }
+                    }
+                }
                 itemsIndexed(current.messages) { index, message ->
                     // 只认消息类型标记，不比对展示文案；用户消息即使文案相同也不会变成入口
                     val onClick = when (message.kind) {
-                        AiMessage.KIND_ACCEPTED_RULE -> throttle { openLocalRules(current.appId) }
+                        AiMessage.KIND_ACCEPTED_RULE ->
+                            throttle { openAcceptedRule(current.appId, message.groupKeys) }
                         AiMessage.KIND_RULE_RETRY -> if (
                             current.status == AiConversation.STATUS_GENERATING
                         ) {
@@ -242,6 +301,16 @@ fun AiConversationPage(route: AiConversationRoute) {
                             index == current.messages.lastIndex,
                         onClick = onClick,
                     )
+                }
+                // 规则入库后只在渲染层给一条建议，不写成 AI 消息：用户觉得规则没生效才会点
+                if (current.messages.lastOrNull()?.kind == AiMessage.KIND_ACCEPTED_RULE) {
+                    item(key = "rule-not-working") {
+                        RuleNotWorkingSuggestion(
+                            onClick = throttle {
+                                vm.retryRule(route.snapshotId, retryFeedback)
+                            },
+                        )
+                    }
                 }
                 if (current.status == AiConversation.STATUS_GENERATING) {
                     item(key = "generating") {
@@ -449,6 +518,33 @@ private val messageTimeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
 /** 跟随末尾时再往下顶的距离：给一个远超任何消息高度的值，让滚动被夹到列表底部 */
 private const val TAIL_SCROLL_DISTANCE = 100_000f
 
+/** 规则入库后的弱化建议：点击才把「规则没生效」作为用户消息发给模型 */
+@Composable
+private fun RuleNotWorkingSuggestion(onClick: () -> Unit) {
+    val shape = MaterialTheme.shapes.small
+    Row(
+        modifier = Modifier
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        GkIcon(
+            imageVector = GkIcons.Autorenew,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(16.dp),
+        )
+        Text(
+            text = stringResource(Res.string.ai_rule_not_working_retry),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
+}
+
 @Composable
 private fun MessageItem(message: AiMessage, isStreaming: Boolean, onClick: (() -> Unit)? = null) {
     val isUser = message.role == "user"
@@ -532,10 +628,10 @@ private fun MessageItem(message: AiMessage, isStreaming: Boolean, onClick: (() -
                     if (clickable) {
                         // 可点击跳转的消息：末尾补一个右箭头，暗示「点进去」
                         Row(
+                            modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            contentText()
+                            Box(modifier = Modifier.weight(1f)) { contentText() }
                             GkIcon(
                                 imageVector = GkIcons.KeyboardArrowRight,
                                 contentDescription = null,

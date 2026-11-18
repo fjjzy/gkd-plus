@@ -13,7 +13,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,12 +23,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonPrimitive
 import li.gkd.app.META
 import li.gkd.app.error.displayMessage
 import li.gkd.app.model.findOption
 import li.gkd.app.network.NewVersion
 import li.gkd.app.network.UpdateClient
+import li.gkd.app.network.compareVersionNames
 import li.gkd.app.network.isNetworkRequestAllowed
 import li.gkd.app.network.logNetworkFailure
 import li.gkd.app.platform.PackageInstallCapability
@@ -54,6 +60,9 @@ import li.gkd.app.ui.platform.UiHost
 import li.gkd.app.util.ToastUtils
 import org.jetbrains.compose.resources.getString
 
+/** GitHub 直链连续这么久没有下载进度，就降级到网盘 */
+private const val DOWNLOAD_STALL_TIMEOUT_MS = 15_000L
+
 /** App-owned update workflow; only package installation belongs to the platform. */
 class UpdateStatus(
     private val scope: CoroutineScope,
@@ -76,10 +85,23 @@ class UpdateStatus(
     private var lastCheckTime = 0L
     private val ignoreMutex = Mutex()
 
-    private fun readIgnored(): Set<Int> =
+    /**
+     * 按 versionName 记录忽略项：GitHub 源的 versionCode 由 tag 合成，
+     * 同一基线的 `1.14.0-beta.1` / `1.14.0-beta.2` / `1.14.0` 会得到同一个值，
+     * 用 code 忽略会把整条版本线一起忽略掉。
+     *
+     * 1.13.0 之前存的是合成 versionCode（数字），读出来是 `"11202"` 这类字符串，
+     * 匹配不上任何 versionName，等于一次性失效——用户被重新提示一次、重新忽略即可。
+     * 不做数字到版本名的反推：合成 code 丢掉了 prerelease / plus 后缀，反推不可逆。
+     */
+    private fun readIgnored(): Set<String> =
         storage
             .read("ignore_version_list.json")
-            ?.let { Json.decodeFromString<Set<Int>>(it) }
+            ?.let { text ->
+                runCatching {
+                    Json.parseToJsonElement(text).jsonArray.map { it.jsonPrimitive.content }.toSet()
+                }.getOrNull()
+            }
             .orEmpty()
 
     val canRecheck
@@ -103,9 +125,10 @@ class UpdateStatus(
                         .findOption(SettingsRepository.settings.value.updateChannel)
                         .url
                 val result = withContext(Dispatchers.IO) { UpdateClient.fetch(url) }
-                if (result.versionCode <= META.versionCode) {
+                // 按版本名比较：GitHub 源的 versionCode 是 tag 合成的，和真实 versionCode 不同量级
+                if (compareVersionNames(result.versionName, META.versionName) <= 0) {
                     if (manual) ToastUtils.show(getString(Res.string.updates_none))
-                } else if (manual || result.versionCode !in ignored) {
+                } else if (manual || result.versionName !in ignored) {
                     lastManual = manual
                     versionUrl = url
                     newVersion.value = result
@@ -121,6 +144,40 @@ class UpdateStatus(
         }
     }
 
+    /**
+     * 长按「检查更新」：不判断是否比当前版本新，直接弹出主渠道的最新版本。
+     * 本地构建的 commitTime 通常比线上 release 新，正常检查会一直判为「暂无更新」，
+     * 这个入口专门用来预览更新弹窗。
+     */
+    fun previewUpdate() {
+        if (checkUpdatingFlow.value) return
+        checkUpdatingFlow.value = true
+        scope.launch {
+            try {
+                lastCheckTime = System.currentTimeMillis()
+                if (!isNetworkRequestAllowed()) {
+                    ToastUtils.show(getString(Res.string.network_unavailable))
+                    return@launch
+                }
+                val url =
+                    UpdateChannel.entries
+                        .findOption(SettingsRepository.settings.value.updateChannel)
+                        .url
+                val result = withContext(Dispatchers.IO) { UpdateClient.fetch(url) }
+                lastManual = true
+                versionUrl = url
+                newVersion.value = result
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                logNetworkFailure("Update preview failed", e)
+                ToastUtils.show(e.displayMessage())
+            } finally {
+                checkUpdatingFlow.value = false
+            }
+        }
+    }
+
     private fun startDownload(version: NewVersion) {
         if (installState.value is UpdateInstallState.Active) return
         if (downloadJob?.isActive == true) return
@@ -129,20 +186,45 @@ class UpdateStatus(
         downloaded = null
         downloadedVersion = null
         installState.value = UpdateInstallState.Idle
+        val url = version.absoluteDownloadUrl(versionUrl)
+        // 只有 GitHub 直链才降级到网盘；兜底源本身不经过 GitHub
+        val quarkUrl =
+            version.quarkUrl
+                ?.takeIf { it.isNotBlank() && url.contains("github", ignoreCase = true) }
         val file = directory.resolve("gkd-v${version.versionCode}.apk")
         downloadJob = scope.launch {
             try {
                 withContext(Dispatchers.IO) {
                     directory.mkdirs()
-                    val transfer = currentCoroutineContext()
-                    UpdateClient.download(
-                        version.absoluteDownloadUrl(versionUrl),
-                        file,
-                        version.fileSize,
-                    ) {
-                        if (transfer.isActive)
-                            downloadStatus.value = UpdateDownloadState.Loading(it.coerceIn(0f, 1f))
+                    val stalled = AtomicBoolean(false)
+                    val lastProgress = AtomicLong(System.currentTimeMillis())
+                    coroutineScope {
+                        val transfer =
+                            launch {
+                                UpdateClient.download(url, file, version.fileSize) { progress ->
+                                    lastProgress.set(System.currentTimeMillis())
+                                    downloadStatus.value =
+                                        UpdateDownloadState.Loading(progress.coerceIn(0f, 1f))
+                                }
+                            }
+                        val watchdog =
+                            launch {
+                                while (isActive) {
+                                    delay(1_000)
+                                    if (
+                                        System.currentTimeMillis() - lastProgress.get() >
+                                            DOWNLOAD_STALL_TIMEOUT_MS
+                                    ) {
+                                        stalled.set(true)
+                                        transfer.cancel()
+                                        break
+                                    }
+                                }
+                            }
+                        transfer.join()
+                        watchdog.cancel()
                     }
+                    if (stalled.get()) error("GitHub download stalled")
                 }
                 ensureActive()
                 downloaded = file
@@ -151,7 +233,14 @@ class UpdateStatus(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                downloadStatus.value = UpdateDownloadState.Failure(e)
+                if (quarkUrl != null) {
+                    // GitHub 下载失败/长时间无进度：直接改走网盘，避免用户卡在错误弹窗里
+                    downloadStatus.value = null
+                    ToastUtils.show(getString(Res.string.update_github_download_fallback))
+                    SystemActionFeedback.openExternal(quarkUrl)
+                } else {
+                    downloadStatus.value = UpdateDownloadState.Failure(e)
+                }
             } finally {
                 if (downloaded == null)
                     withContext(NonCancellable + Dispatchers.IO) { file.delete() }
@@ -165,7 +254,7 @@ class UpdateStatus(
             try {
                 ignoreMutex.withLock {
                     withContext(Dispatchers.IO) {
-                        val next = readIgnored() + version.versionCode
+                        val next = readIgnored() + version.versionName
                         storage.writeAtomically(
                             "ignore_version_list.json",
                             Json.encodeToString(next),
@@ -189,7 +278,7 @@ class UpdateStatus(
         installState.value = UpdateInstallState.Active
         scope.launch {
             try {
-                when (installPackagePrivileged(file, version.versionCode, host)) {
+                when (installPackagePrivileged(file, version.versionName, host)) {
                     is PlatformResult.Success -> installState.value = UpdateInstallState.Success
                     PlatformResult.Unsupported -> {
                         installState.value = UpdateInstallState.Idle

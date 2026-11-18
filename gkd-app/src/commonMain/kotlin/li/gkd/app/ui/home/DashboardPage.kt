@@ -51,6 +51,7 @@ import li.gkd.app.state.Loadable
 import li.gkd.app.subscription.SubscriptionRepository
 import li.gkd.app.ui.MainViewModel
 import li.gkd.app.ui.navigation.AiWorkbenchRoute
+import li.gkd.app.ui.navigation.KeepAliveRoute
 import li.gkd.app.ui.component.GkAlertDialog
 import li.gkd.app.ui.component.GkGroupNameText
 import li.gkd.app.ui.component.GkIcon
@@ -260,6 +261,70 @@ fun dashboardPage(
                     { mainVm.navigator.navigate(WorkModeRoute) },
                 )
             }
+            if (platform.activityRunning) {
+                PageItemCard(
+                    GkIcons.Layers,
+                    stringResource(Res.string.activity_log_title),
+                    stringResource(Res.string.activity_record_description),
+                    stringResource(Res.string.activity_log_open),
+                    { mainVm.navigator.navigate(ActivityLogRoute) },
+                )
+            }
+            PageItemCard(
+                GkIcons.AutoMode,
+                stringResource(Res.string.dashboard_ai_workbench_title),
+                stringResource(Res.string.dashboard_ai_workbench_subtitle),
+                stringResource(Res.string.dashboard_ai_workbench_open),
+                { mainVm.navigator.navigate(AiWorkbenchRoute) },
+            )
+            PageItemCard(
+                GkIcons.VerifiedUser,
+                stringResource(Res.string.keep_alive_guide_title),
+                stringResource(Res.string.keep_alive_guide_subtitle),
+                stringResource(Res.string.keep_alive_guide_open),
+                { mainVm.navigator.navigate(KeepAliveRoute) },
+            )
+            var showSimpleRuleGuide by remember { mutableStateOf(false) }
+            PageItemCard(
+                GkIcons.Edit,
+                stringResource(Res.string.dashboard_simple_rule_guide_title),
+                stringResource(Res.string.dashboard_simple_rule_guide_subtitle),
+                stringResource(Res.string.dashboard_simple_rule_guide_open),
+                { showSimpleRuleGuide = true },
+            )
+            if (showSimpleRuleGuide) {
+                GkAlertDialog(
+                    onDismissRequest = { showSimpleRuleGuide = false },
+                    title = {
+                        Text(text = stringResource(Res.string.dashboard_simple_rule_guide_title))
+                    },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = stringResource(Res.string.dashboard_simple_rule_guide_step1),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                text = stringResource(Res.string.dashboard_simple_rule_guide_step2),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                text = stringResource(Res.string.dashboard_simple_rule_guide_step3),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                text = stringResource(Res.string.dashboard_simple_rule_guide_step4),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showSimpleRuleGuide = false }) {
+                            Text(text = stringResource(Res.string.action_understood))
+                        }
+                    },
+                )
+            }
             PageSwitchItemCard(
                 GkIcons.Notifications,
                 stringResource(Res.string.persistent_notification),
@@ -307,55 +372,6 @@ fun dashboardPage(
                 },
                 (latestState is Loadable.Failure),
             )
-            if (platform.activityRunning) {
-                PageItemCard(
-                    GkIcons.Layers,
-                    stringResource(Res.string.activity_log_title),
-                    stringResource(Res.string.activity_record_description),
-                    stringResource(Res.string.activity_log_open),
-                    { mainVm.navigator.navigate(ActivityLogRoute) },
-                )
-            }
-            PageItemCard(
-                GkIcons.AutoMode,
-                "AI 规则工作台",
-                "管理 AI 会话，从快照选择组件生成规则",
-                "打开 AI 规则工作台",
-                { mainVm.navigator.navigate(AiWorkbenchRoute) },
-            )
-            var showManualUpdateDialog by remember { mutableStateOf(false) }
-            PageItemCard(
-                GkIcons.Autorenew,
-                "手动更新 APP",
-                "无加速器从此处手动更新最新版",
-                "打开手动更新下载弹窗",
-                { showManualUpdateDialog = true },
-            )
-            if (showManualUpdateDialog) {
-                GkAlertDialog(
-                    onDismissRequest = { showManualUpdateDialog = false },
-                    title = { Text(text = "手动更新 APP") },
-                    text = { Text(text = "无加速器从此处手动更新最新版") },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            showManualUpdateDialog = false
-                            mainVm.textDialog.showUrl("https://pan.quark.cn/s/62672aa3402a")
-                        }) {
-                            Text(text = "夸克网盘")
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = {
-                            showManualUpdateDialog = false
-                            mainVm.textDialog.showUrl(
-                                "https://pan.baidu.com/s/1msaC8BsFKcZUOYKVpI43dQ?pwd=417a",
-                            )
-                        }) {
-                            Text(text = "百度网盘")
-                        }
-                    },
-                )
-            }
             PageItemCard(
                 GkIcons.HelpOutline,
                 stringResource(Res.string.gkd_learn_more),

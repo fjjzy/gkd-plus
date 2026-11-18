@@ -155,12 +155,6 @@ fun AdvancedPage(
                 onClick = { mainVm.navigator.navigate(SnapshotSettingsRoute) },
             )
             AdvancedSectionTitle("AI 自动规则")
-            GkTextSwitch(
-                title = "AI 自动识别规则",
-                subtitle = "无障碍自动截图、音量键截图时自动识别并生成规则",
-                checked = store.aiEnable,
-                onCheckedChange = vm::setAiEnable,
-            )
             GkSettingItem(
                 title = "AI 规则设置",
                 subtitle = "配置大模型协议、API 地址、模型等参数",

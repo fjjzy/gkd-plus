@@ -19,6 +19,8 @@ data class AiMessage(
      * 老数据没有该字段，反序列化为空串，按普通消息处理。
      */
     val kind: String = KIND_TEXT,
+    /** 入库后对应的本地规则组 key；点击「已加入本地规则」时用来定位高亮 */
+    val groupKeys: List<Int> = emptyList(),
 ) {
     companion object {
         const val KIND_TEXT = ""

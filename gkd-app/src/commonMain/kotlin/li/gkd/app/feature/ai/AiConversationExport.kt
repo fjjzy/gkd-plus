@@ -9,6 +9,7 @@ import li.gkd.app.META
 import li.gkd.app.settings.AiConfig
 import li.gkd.app.snapshot.SnapshotStore
 import li.gkd.app.storage.ExportFileNames
+import li.gkd.app.storage.HistoryDirectory
 import li.gkd.app.storage.appStorage
 import li.gkd.app.util.redactSensitiveText
 import java.io.File
@@ -48,8 +49,10 @@ object AiConversationExport {
     )
 
     /** 读快照、拼 JSON、写进 [appStorage]，返回可分享的文件 */
-    suspend fun build(conversation: AiConversation, currentConfig: AiConfig): File =
-        withContext(Dispatchers.IO) {
+    suspend fun build(conversation: AiConversation, currentConfig: AiConfig): File {
+        // 外部旧数据的快照还在后台迁移，没迁完时读不到文件
+        appStorage().awaitHistoryMigration(HistoryDirectory.Snapshot)
+        return withContext(Dispatchers.IO) {
             val snapshotJson = runCatching {
                 SnapshotStore.snapshotFile(conversation.snapshotId).readText()
             }.getOrNull()
@@ -78,4 +81,5 @@ object AiConversationExport {
                 "json",
             ).apply { writeText(text) }
         }
+    }
 }

@@ -12,8 +12,11 @@ object AppLinks {
     const val GithubUploadPolicies = "$Github/upload/policies/assets"
     const val PrivilegeRepository = "$Github/priv-kit/priv-kit"
     const val WebView2Download = "https://developer.microsoft.com/microsoft-edge/webview2/"
+    /** GitHub 的 latest 接口会跳过 prerelease，稳定版因此天然看不到 beta */
     const val StableUpdate = "https://api.github.com/repos/fjjzy/gkd-plus/releases/latest"
-    const val BetaUpdate = "https://api.github.com/repos/fjjzy/gkd-plus/releases/latest"
+
+    /** 测试版要能拿到标记为 prerelease 的 Release，只能读列表再自行挑最新 */
+    const val BetaUpdate = "https://api.github.com/repos/fjjzy/gkd-plus/releases"
     const val GiteeFallbackVersion = "https://gitee.com/fjjzy/gkd-plus/raw/master/version.json"
     const val NpmFallbackVersion = "https://registry.npmmirror.com/gkd-plus-version/latest"
     const val DocConfig = "https://registry.npmmirror.com/@gkd-kit/docs/latest/files/_config.json"

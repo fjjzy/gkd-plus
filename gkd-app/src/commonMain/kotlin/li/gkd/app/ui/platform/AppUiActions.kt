@@ -12,7 +12,7 @@ import li.gkd.app.platform.PlatformResult
 expect fun openAppDetails()
 
 /** 尝试打开厂商自启动管理页；找不到时退回应用详情。 */
-expect fun openAutoStartSettings()
+expect suspend fun openAutoStartSettings()
 
 /** Success indicates whether a launcher activity was found and handed to the OS. */
 expect fun UiHost.launchApp(appId: String): PlatformResult<Boolean>

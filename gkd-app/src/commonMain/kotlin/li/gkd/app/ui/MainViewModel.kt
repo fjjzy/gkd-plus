@@ -6,6 +6,7 @@ import kotlinx.coroutines.withContext
 import li.gkd.app.META
 import li.gkd.app.a11y.observeEnabledGestureServices
 import li.gkd.app.crash.CrashData
+import li.gkd.app.logging.LogUtils
 import li.gkd.app.permission.PermissionRequester
 import li.gkd.app.rule.RuleGroupTarget
 import li.gkd.app.subscription.RawSubscription
@@ -34,7 +35,10 @@ class MainViewModel(val permissions: PermissionRequester) : BaseViewModel() {
     }
 
     fun registerCurrent() {
-        check(current == null || current === this) { "Main UI is already registered" }
+        if (current != null && current !== this) {
+            // Activity 快速重建时旧宿主的 onCleared 可能晚于新宿主创建，以新宿主为准，不要让用户看到崩溃
+            LogUtils.w("Main UI re-registered", current, this)
+        }
         current = this
     }
 

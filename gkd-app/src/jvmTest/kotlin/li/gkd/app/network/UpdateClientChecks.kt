@@ -72,12 +72,16 @@ suspend fun assertUpdateClient(directory: File) {
             assertFalse(failedFile.exists())
             val fetchError =
                 assertFailsWith<ResponseException> {
-                    UpdateClient.fetch(URI(url).resolve("/error-$status").toString())
+                    // 关掉兜底源：否则 gitee / npmmirror 会返回线上版本，主渠道的错误码断言永远不成立
+                    UpdateClient.fetch(
+                        URI(url).resolve("/error-$status").toString(),
+                        fallbackUrls = emptyList(),
+                    )
                 }
             assertEquals("HTTP $status", networkFailureSummary(fetchError))
             logNetworkFailure("http-status-log-check-$status", fetchError)
         }
-        val version = UpdateClient.fetch(url)
+        val version = UpdateClient.fetch(url, fallbackUrls = emptyList())
         assertEquals(NewVersion(2, "2", "gkd.apk", bytes.size.toLong()), version)
         logNetworkFailure(
             "transport-log-check",

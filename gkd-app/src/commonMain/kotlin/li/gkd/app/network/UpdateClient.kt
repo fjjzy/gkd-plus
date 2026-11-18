@@ -18,7 +18,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import li.gkd.app.META
 
@@ -42,6 +43,7 @@ private data class GitHubRelease(
     @SerialName("tag_name") val tagName: String,
     val body: String? = null,
     @SerialName("published_at") val publishedAt: String? = null,
+    val draft: Boolean = false,
     val assets: List<GitHubReleaseAsset> = emptyList(),
 )
 
@@ -65,13 +67,24 @@ private fun String.parseVersionCode(): Int {
 }
 
 object UpdateClient {
+    /** 兜底源的顺序即并发发起顺序；[fetch] 的调用方可覆盖，测试传空即可关掉兜底。 */
+    val FallbackUrls = listOf(AppLinks.GiteeFallbackVersion, AppLinks.NpmFallbackVersion)
     /**
      * 主渠道与兜底源并发请求：GitHub 不可达时取版本号最大的兜底源；
      * 主渠道可用时也带上兜底源的夸克网盘链接。
      */
-    suspend fun fetch(url: String): NewVersion = coroutineScope {
+    /**
+     * 主渠道与兜底源并发请求：GitHub 不可达时取版本号最大的兜底源；
+     * 主渠道可用时也带上兜底源的夸克网盘链接。
+     *
+     * [fallbackUrls] 传空表示不查兜底源，此时主渠道的失败原样抛出。
+     */
+    suspend fun fetch(
+        url: String,
+        fallbackUrls: List<String> = FallbackUrls,
+    ): NewVersion = coroutineScope {
         val primary = async { runCatchingCancellable { fetchPrimary(url) } }
-        val fallbacks = async { fetchFallbacks() }
+        val fallbacks = async { fetchFallbacks(fallbackUrls) }
         val primaryResult = primary.await()
         val fallbackVersions = fallbacks.await()
         val quarkUrl = fallbackVersions.firstNotNullOfOrNull { it.quarkUrl }
@@ -119,55 +132,69 @@ object UpdateClient {
                     timeout { requestTimeoutMillis = UPDATE_CHECK_TIMEOUT_MS }
                 }
                 .bodyAsText()
-        val body = updateJson.parseToJsonElement(text).jsonObject
-
-        fun stringField(name: String): String? =
-            runCatching { body[name]?.jsonPrimitive?.content }
-                .getOrNull()
-                ?.takeIf { it.isNotBlank() }
-
-        if (stringField("tag_name") == null) {
-            val apiMessage = stringField("message")
-            error(
-                if (apiMessage == null) {
-                    "更新接口没有返回版本信息（可能被网络代理拦截）"
-                } else {
-                    "更新接口返回异常：$apiMessage"
+        val element = updateJson.parseToJsonElement(text)
+        val releases =
+            when (element) {
+                is JsonObject -> {
+                    if (element["tag_name"]?.jsonPrimitive?.content.isNullOrBlank()) {
+                        val apiMessage = element["message"]?.jsonPrimitive?.content
+                        error(
+                            if (apiMessage == null) {
+                                "更新接口没有返回版本信息（可能被网络代理拦截）"
+                            } else {
+                                "更新接口返回异常：$apiMessage"
+                            }
+                        )
+                    }
+                    listOf(element)
                 }
-            )
-        }
-        val release = updateJson.decodeFromJsonElement(GitHubRelease.serializer(), body)
+                // 测试版渠道读 releases 列表，需要自己挑出最新的一条（含 prerelease）
+                is JsonArray -> element.filterIsInstance<JsonObject>()
+                else -> emptyList()
+            }
+        val latest =
+            releases
+                .map { updateJson.decodeFromJsonElement(GitHubRelease.serializer(), it) }
+                .filter { !it.draft }
+                .sortedWith { left, right -> compareVersionNames(left.tagName, right.tagName) }
+                .lastOrNull()
+                ?: error("更新接口没有返回可用版本（可能被网络代理拦截）")
         val apkAsset =
-            release.assets.firstOrNull { it.name.endsWith(".apk", ignoreCase = true) }
+            latest.assets.firstOrNull { it.name.endsWith(".apk", ignoreCase = true) }
                 ?: error("该 Release 里没有 APK 文件")
         // 当前安装包就是该 tag 构建的：返回自身版本，让调用方判为「暂无更新」
         val code =
-            if (release.tagName == META.tagName) {
+            if (latest.tagName == META.tagName) {
                 META.versionCode
             } else {
-                release.tagName.parseVersionCode()
+                latest.tagName.parseVersionCode()
             }
         return NewVersion(
             versionCode = code,
-            versionName = release.tagName.removePrefix("v"),
+            versionName = latest.tagName.removePrefix("v"),
             downloadUrl = apkAsset.browserDownloadUrl,
             fileSize = apkAsset.size,
             versionLogs =
                 listOf(
                     VersionLog(
-                        name = release.tagName.removePrefix("v"),
-                        code = release.tagName.parseVersionCode(),
-                        desc = release.body.orEmpty(),
+                        name = latest.tagName.removePrefix("v"),
+                        code = latest.tagName.parseVersionCode(),
+                        desc = latest.body.orEmpty(),
                     )
                 ),
         )
     }
 
-    private suspend fun fetchFallbacks(): List<FallbackVersion> = coroutineScope {
-        listOf(
-                async { fetchFallbackOrNull { fetchGiteeFallback() } },
-                async { fetchFallbackOrNull { fetchNpmFallback() } },
-            )
+    private suspend fun fetchFallbacks(urls: List<String>): List<FallbackVersion> = coroutineScope {
+        urls
+            .map { url ->
+                async {
+                    fetchFallbackOrNull {
+                        if (url == AppLinks.NpmFallbackVersion) fetchNpmFallback()
+                        else fetchGiteeFallback()
+                    }
+                }
+            }
             .awaitAll()
             .filterNotNull()
     }

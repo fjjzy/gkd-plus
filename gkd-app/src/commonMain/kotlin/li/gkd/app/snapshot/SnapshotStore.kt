@@ -21,6 +21,7 @@ import li.gkd.app.logging.LogUtils
 import li.gkd.app.model.ComplexSnapshot
 import li.gkd.app.snapshot.platform.prepareSnapshotReplacement
 import li.gkd.app.storage.ExportFileNames
+import li.gkd.app.storage.HistoryDirectory
 import li.gkd.app.storage.SnapshotIssue
 import li.gkd.app.storage.StorageException
 import li.gkd.app.storage.ZipArchive
@@ -46,7 +47,9 @@ object SnapshotStore {
     private val mutationMutex = Mutex()
     private val fileLayout by lazy { SnapshotFileLayout(appStorage().snapshot) }
 
-    suspend fun save(snapshot: ComplexSnapshot, screenshot: ByteArray) =
+    suspend fun save(snapshot: ComplexSnapshot, screenshot: ByteArray) {
+        appStorage().awaitHistoryMigration(HistoryDirectory.Snapshot)
+        // 不在这里再套一层 mutationMutex：下面的 save 自己会上锁，kotlin Mutex 不可重入
         save(
             snapshot.id,
             write = { files ->
@@ -58,6 +61,7 @@ object SnapshotStore {
             },
             publish = { Db.snapshotDao.insert(snapshot.toSnapshot()) },
         )
+    }
 
     fun snapshotFile(id: Long): File = fileLayout.committed(id).snapshotFile
 
@@ -68,6 +72,7 @@ object SnapshotStore {
         githubAssetId: Int,
         screenshotModifiedAt: Long,
     ): Boolean = mutationMutex.withLock {
+        appStorage().awaitHistoryMigration(HistoryDirectory.Snapshot)
         withContext(Dispatchers.IO) {
             val screenshot = fileLayout.committed(snapshotId).screenshotFile
             if (!screenshot.isFile || screenshot.lastModified() != screenshotModifiedAt) {
@@ -78,6 +83,7 @@ object SnapshotStore {
     }
 
     suspend fun getMinSnapshot(id: Long): JsonObject = mutationMutex.withLock {
+        appStorage().awaitHistoryMigration(HistoryDirectory.Snapshot)
         val files = fileLayout.committed(id)
         val cachedText =
             withContext(Dispatchers.IO) {
@@ -115,6 +121,8 @@ object SnapshotStore {
     suspend fun delete(snapshot: Snapshot) {
         mutationMutex.withLock {
             currentCoroutineContext().ensureActive()
+            // 迁移会把暂存的快照重新发布回来，不先等它把已删除的记录复活
+            appStorage().awaitHistoryMigration(HistoryDirectory.Snapshot)
             withContext(NonCancellable + Dispatchers.IO) {
                 val directory = fileLayout.committed(snapshot.id).directory
                 val staged = stageDeletion(directory)
@@ -131,6 +139,8 @@ object SnapshotStore {
 
     suspend fun replaceScreenshot(snapshot: Snapshot, newBytes: ByteArray): Boolean =
         mutationMutex.withLock {
+            // 迁移会用外部旧图覆盖同一路径，等它落地后再替换
+            appStorage().awaitHistoryMigration(HistoryDirectory.Snapshot)
             withContext(Dispatchers.IO) {
                 val files = fileLayout.committed(snapshot.id)
                 val temporary =
@@ -175,6 +185,7 @@ object SnapshotStore {
 
     suspend fun createUploadArchive(snapshotId: Long): SnapshotUploadArchive =
         mutationMutex.withLock {
+            appStorage().awaitHistoryMigration(HistoryDirectory.Snapshot)
             val screenshotModifiedAt =
                 withContext(Dispatchers.IO) {
                     fileLayout.committed(snapshotId).screenshotFile.lastModified()
@@ -190,6 +201,7 @@ object SnapshotStore {
         appId: String? = null,
         activityId: String? = null,
     ): File = mutationMutex.withLock {
+        appStorage().awaitHistoryMigration(HistoryDirectory.Snapshot)
         createArchiveLocked(snapshotId, appId, activityId)
     }
 

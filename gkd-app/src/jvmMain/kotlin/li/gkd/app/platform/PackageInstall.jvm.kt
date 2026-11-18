@@ -10,6 +10,6 @@ actual fun privilegedPackageInstallCapability(): Flow<PackageInstallCapability> 
 
 actual suspend fun installPackagePrivileged(
     file: File,
-    versionCode: Int,
+    versionName: String,
     host: UiHost,
 ): PlatformResult<Unit> = PlatformResult.Unsupported

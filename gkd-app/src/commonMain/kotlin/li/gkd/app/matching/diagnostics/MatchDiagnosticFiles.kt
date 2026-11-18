@@ -14,6 +14,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import li.gkd.app.app.applicationScope
 import li.gkd.app.logging.LogUtils
+import li.gkd.app.storage.HistoryDirectory
 import li.gkd.app.storage.appStorage
 import li.gkd.app.util.JsonUtils
 import li.gkd.db.Db
@@ -117,6 +118,7 @@ object MatchDiagnosticFiles {
 
     suspend fun <T> withSavedFiles(block: suspend () -> T): T =
         withContext(Dispatchers.IO) {
+            appStorage().awaitHistoryMigration(HistoryDirectory.MatchDiagnostics)
             writing.withLock {
                 while (true) {
                     val capture = synchronized(lock) { pending.values.firstOrNull() } ?: break

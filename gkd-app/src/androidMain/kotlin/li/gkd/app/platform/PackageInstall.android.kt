@@ -15,7 +15,6 @@ import android.content.pm.PackageManager
 import android.content.pm.PackageManagerHidden
 import android.os.Process
 import androidx.core.content.IntentCompat
-import androidx.core.content.pm.PackageInfoCompat
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
@@ -87,7 +86,7 @@ private fun systemAppMarketPackage(): String? {
 
 actual suspend fun installPackagePrivileged(
     file: File,
-    versionCode: Int,
+    versionName: String,
     host: UiHost,
 ): PlatformResult<Unit> =
     withContext(Dispatchers.IO) {
@@ -104,9 +103,10 @@ actual suspend fun installPackagePrivileged(
             )
         }
         val archive = app.packageManager.getPackageArchiveInfo(file.absolutePath, 0)
+        // 按版本名校验：GitHub 源的 versionCode 由 tag 合成，与 APK 实际 code 不同量级
         require(
             archive?.packageName == META.appId &&
-                PackageInfoCompat.getLongVersionCode(archive) == versionCode.toLong(),
+                archive.versionName == versionName,
         ) {
             getString(Res.string.update_install_invalid_apk)
         }

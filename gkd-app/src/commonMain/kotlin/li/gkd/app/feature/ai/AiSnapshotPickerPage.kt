@@ -237,7 +237,7 @@ fun AiSnapshotPickerPage(route: AiSnapshotPickerRoute) {
                         )
                     }
                     TextButton(
-                        enabled = selectedNodes.isNotEmpty(),
+                        // 不选组件也可以直接生成：以整份快照为输入，规则由模型自行定位
                         onClick = throttle {
                             val appId = snapshot?.appId ?: return@throttle
                             vm.generateDirect(route.snapshotId, appId, selectedNodes)
@@ -335,5 +335,5 @@ private fun AiSelectedComponent.infoRows(): List<Pair<String, String>> = listOfN
     name?.let { "类名" to it },
     "可点击" to clickable.toString(),
     "可长按" to longClickable.toString(),
-    "区域" to bounds,
+    "区域bounds" to bounds,
 )

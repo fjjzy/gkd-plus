@@ -187,6 +187,17 @@ fun SnapshotSettingsPage(
                 },
             )
 
+            GkTextSwitch(
+                title = stringResource(Res.string.ai_auto_source_title),
+                subtitle = stringResource(Res.string.ai_auto_source_description),
+                checked = store.aiEnable,
+                onCheckedChange = { enabled ->
+                    SettingsRepository.updateSettings {
+                        it.copy(aiEnable = enabled)
+                    }
+                },
+            )
+
             Text(
                 text = stringResource(Res.string.screenshot_processing),
                 modifier = Modifier.titleItemPadding(),

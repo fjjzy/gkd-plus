@@ -26,6 +26,9 @@ class ShareLogState(
 ) {
     private val diagnostics = MutableStateFlow<List<MatchDiagnosticRecord>?>(null)
 
+    /** 附加快照的天数：0 表示不附加 */
+    private val snapshotDays = MutableStateFlow(0)
+
     fun show(diagnostics: List<MatchDiagnosticRecord> = emptyList()) {
         this.diagnostics.value = diagnostics.toList()
     }
@@ -38,7 +41,7 @@ class ShareLogState(
         val item =
             GithubUploadItem(
                 label = getString(Res.string.logs_title),
-                getFile = { createLogArchive(diagnostics) },
+                getFile = { createLogArchive(diagnostics, snapshotDays.value) },
                 showHref = { AppLinks.log(it.id) },
                 releaseFile = { StorageMaintenance.deleteSharedFile(appStorage(), it) },
             )
@@ -48,6 +51,7 @@ class ShareLogState(
     @Composable
     fun Render(host: UiHost) {
         val requestedDiagnostics by diagnostics.collectAsStateWithLifecycle()
+        val selectedSnapshotDays by snapshotDays.collectAsStateWithLifecycle()
         requestedDiagnostics?.let { targets ->
             GkShareLogDialog(
                 onDismiss = ::dismiss,
@@ -55,18 +59,22 @@ class ShareLogState(
                     dismiss()
                     scope.launchUi {
                         host.shareArchive(getString(Res.string.logs_share_file)) {
-                            createLogArchive(targets)
+                            createLogArchive(targets, selectedSnapshotDays)
                         }
                     }
                 },
                 onSave = {
                     dismiss()
-                    scope.launchUi { host.saveArchive { createLogArchive(targets) } }
+                    scope.launchUi {
+                        host.saveArchive { createLogArchive(targets, selectedSnapshotDays) }
+                    }
                 },
                 onUpload = {
                     dismiss()
                     scope.launchUi { upload(targets) }
                 },
+                snapshotDays = selectedSnapshotDays,
+                onSnapshotDaysChange = { snapshotDays.value = it },
             )
         }
     }

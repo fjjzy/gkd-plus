@@ -4,6 +4,8 @@
 - 同步上游代码时快速定位需要重新应用的本地改动；
 - 向使用者说明本分支新增的能力。
 
+> 合并上游后除本文档外，还必须逐项执行 [迁移验收清单](docs/plus-migration-checklist.md)：入口可达、开关有消费者、弹窗会渲染，不能只以编译通过为准。
+
 > 当前基线：上游 `v1.13.0`（commit `0ee5d146`，2026-11-06）。
 > 结构：`:gkd-app` 为 KMP library（`androidMain` / `commonMain`），`:gkd-android` 为 Android App 宿主；plus 的 AI 代码位于 `commonMain`，品牌与签名位于 `gkd-android`。
 > 上游已将模块 `:app` 重命名为 `:gkd-app`，包名由 `li.songe.gkd` 改为 `li.gkd.app`，并拆分出 `:gkd-db` / `:gkd-selector` / `:gkd-hidden-api` 模块。本分支所有改动均已适配新架构。
@@ -27,10 +29,10 @@
 - `gkd-app/src/commonMain/composeResources/files/gkd-rule-generator-prompt.md` — 内置提示词
 
 **改动文件**
-- `gkd-app/src/commonMain/kotlin/li/gkd/app/data/settings/SettingsStore.kt` — 新增 `AiConfig` 数据类及 `aiEnable` / `aiConfig` 字段
+- `gkd-app/src/commonMain/kotlin/li/gkd/app/settings/SettingsStore.kt` — 新增 `AiConfig` 数据类及 `aiEnable` / `aiConfig` 字段
 - `gkd-app/src/commonMain/kotlin/li/gkd/app/snapshot/SnapshotCapture.kt` — 快照保存后按开关触发 AI 生成
-- `gkd-app/src/commonMain/kotlin/li/gkd/app/feature/settings/AdvancedPage.kt` — 新增「AI 自动规则」区块与配置入口
-- `gkd-app/src/commonMain/kotlin/li/gkd/app/feature/settings/AdvancedVm.kt` — 新增 `setAiEnable`
+- `gkd-app/src/commonMain/kotlin/li/gkd/app/ui/snapshot/SnapshotSettingsPage.kt` — 「AI 自动规则」区块与「自动截图后生成规则」开关，写入 `SettingsRepository.updateSettings { it.copy(aiEnable = ...) }`
+- `gkd-app/src/commonMain/kotlin/li/gkd/app/ui/settings/AdvancedPage.kt` — 只保留「AI 规则设置」入口；`AdvancedViewModel` 不再有 `setAiEnable`
 
 ### 2. AI 规则工作台
 
@@ -75,29 +77,40 @@
 **改动文件**
 - `gkd-app/src/commonMain/kotlin/li/gkd/app/data/settings/SettingsStore.kt` — `aiConfig` 随设置进入 `AppStore` 备份条目
 
-### 7. 首页「手动更新 APP」入口
+### 7. 首页「手动更新 APP」入口（已移除）
 
-在首页新增「手动更新 APP」卡片，弹窗提供夸克网盘 / 百度网盘下载地址，方便无加速器用户更新。
-
-**改动文件**
-- `gkd-app/src/commonMain/kotlin/li/gkd/app/ui/home/DashboardPage.kt`
-
-### 8. 更新检查与多源兜底
-
-更新渠道指向本仓库的 GitHub Release；GitHub 不可达时自动回退到 Gitee 与 npm 镜像获取版本信息，并可经夸克网盘下载。
+曾于首页加过「手动更新 APP」卡片，弹窗提供夸克网盘 / 百度网盘下载地址。因「设置 → 关于 → 检查更新」已覆盖 GitHub 不可达时的 Gitee / npm 兜底与夸克网盘下载降级，该卡片冗余，已删除（2026-11-09）；首页只保留「AI 规则工作台」「GKD 保活引导」两个 fork 入口。
 
 **改动文件**
-- `gkd-app/src/commonMain/kotlin/li/gkd/app/util/Option.kt` — `UpdateChannelOption` 指向 `api.github.com/repos/fjjzy/gkd-plus/releases/latest`
-- `gkd-app/src/commonMain/kotlin/li/gkd/app/util/Upgrade.kt` — `GitHubRelease` 解析、版本比较、`absoluteDownloadUrl`、多源并发兜底
-- `gkd-app/src/commonMain/kotlin/li/gkd/app/util/Constants.kt` — 兜底源地址（Gitee raw / npmmirror）
-- `.github/workflows/Build-Release.yml` — CI 同步 Gitee `version.json`、发布 npmmirror npm 包
+- `gkd-app/src/commonMain/kotlin/li/gkd/app/ui/home/DashboardPage.kt` — 删除卡片与弹窗、`Autorenew` 图标引用
+
+### 8. 更新检查、稳定版 / 测试版与多源兜底
+
+更新渠道指向本仓库的 GitHub Release，并区分稳定版与测试版；GitHub 不可达时自动回退到 Gitee 与 npm 镜像获取版本信息，并可经夸克网盘下载。
+
+- 稳定版读 `releases/latest`（GitHub 自动排除 prerelease），测试版读 `releases` 列表并按版本名挑最新，因此测试版能看到标记为 prerelease 的 Release
+- 版本名比较支持 `-beta.N`：同基线 `x.y.z-beta.N` < `x.y.z` < `x.y.z-plus.N`；稳定版用户不会收到 beta 的升级提示
+- 「忽略此版本」按 versionName 记录（GitHub 源的合成 versionCode 会把同基线 beta 与正式版混在一起）
+- 兜底源（Gitee / npm）只由稳定版发版更新；beta tag 跳过，避免把走兜底的稳定版用户推到测试版
+- CI 校验 tag 与构建出的 versionName 一致（`v{versionName}`），不一致直接失败
+- 特权安装按下载 APK 的 versionName 校验，不再拿 GitHub 合成 versionCode 比对
+
+**改动文件**
+- `gkd-app/src/commonMain/kotlin/li/gkd/app/network/AppLinks.kt` — `StableUpdate` / `BetaUpdate` 两个渠道地址
+- `gkd-app/src/commonMain/kotlin/li/gkd/app/network/UpdateClient.kt` — `GitHubRelease` 解析（单对象与列表）、多源并发兜底
+- `gkd-app/src/commonMain/kotlin/li/gkd/app/network/NewVersion.kt` — `compareVersionNames`（含 beta 预发布排序）、`absoluteDownloadUrl`
+- `gkd-app/src/commonMain/kotlin/li/gkd/app/ui/update/UpdateStatus.kt` — 版本比较、忽略列表、下载降级
+- `gkd-app/src/androidMain/kotlin/li/gkd/app/platform/PackageInstall.android.kt` — 特权安装按 versionName 校验下载包
+- `gkd-app/src/commonMain/kotlin/li/gkd/app/ui/settings/AboutPage.kt` — 更新渠道切换与 beta 提示
+- `.github/workflows/release.yml` — tag/versionName 校验、prerelease 标记、稳定版专属的 Gitee/npm 兜底发布
 
 ### 9. 导出日志的敏感信息脱敏
 
 导出日志（含 store 配置、日志文件）时自动把 API Key / Bearer Token / x-api-key 替换为 `********`，避免密钥泄露。
 
 **改动文件**
-- `gkd-app/src/commonMain/kotlin/li/gkd/app/util/FolderUtils.kt` — `buildLogFile()` 复制到临时目录并脱敏；新增 `redactSensitiveText`
+- `gkd-app/src/commonMain/kotlin/li/gkd/app/storage/LogArchive.kt` — `build()` 把 store / db / subscription / crash / startup-log / 附加目录逐个复制到导出目录；新增 `redactSensitiveFiles()` 就地脱敏副本
+- `gkd-app/src/commonMain/kotlin/li/gkd/app/util/Redaction.kt` — 新增 `redactSensitiveText`
 
 ### 10. 版本声明
 
@@ -106,22 +119,31 @@
 **改动文件**
 - `gkd-app/src/commonMain/kotlin/li/gkd/app/feature/settings/AboutPage.kt`
 
-### 11. 简易规则
+### 11. 简易规则（李跳跳风格）
 
-在 `应用规则` 页右下角展开按钮中提供「简易规则」入口，填定位文字或控件 ID 即可生成一条规则，无需手写选择器。
+在 `应用规则` 页右下角展开按钮中提供「简易规则」入口，填「定位弹窗」和「关闭方式」即可生成一条规则，无需手写选择器；首页另有「如何使用李跳跳简易规则」引导卡片（底部「应用」页 → 选择应用 → 右下角加号 → 「添加简易规则」）。
 
-- 文字 / ID 二选一，都填时优先按 ID；选择器分别为 `[text="..."]` 与 `[id="..."]`，值内的 `\` 与 `"` 会转义
-- 可选「通过返回键关闭」：动作为 `back`，否则为 `click`
-- 规则名取文字（文字为空时取 ID），追加到本地订阅（`LOCAL_SUBS_ID`）的当前应用下；同名规则自动加 `-2`、`-3` 后缀，不覆盖已有规则
+- 两个输入框都支持：文字、完整 ID（含 `:id/`）、短 ID（`vid:xxx`）、bounds（`left,top,right,bottom` 或 `bounds:` 前缀），值内的 `\` 与 `"` 会转义
+- 只填关闭方式：直接匹配并点击它；只填定位：匹配弹窗，动作为返回键
+- 两个都填：matches 为 `@[关闭] <<n * >n [定位]`，点击关闭控件，同时要求它与弹窗定位共享祖先节点（即弹窗确实出现过）
+- 「示例（4）」按钮循环切换：文字 / 完整 ID / 短 ID / bounds 各一组，每点一次把下一组写入两个输入框
+- 两个输入框上方直接显示完整说明（定位弹窗 / 关闭弹窗所需要的文字、ID、bounds），不依赖点击后才出现的浮动提示；关闭弹窗留空时动作为返回键
+- 第一个输入框旁的信息按钮打开同一份说明：先讲「如何获取 bounds」（快照当前界面 → 快照选择 → 右上角详情复制「区域bounds」），紧接着内联「如何快照？」（复用磁贴教程内容），不再拆成两个独立入口
+- 规则名取定位输入（为空时取关闭输入），追加到本地订阅（`LOCAL_SUBS_ID`）的当前应用下；同名规则自动加 `-2`、`-3` 后缀，不覆盖已有规则
 - 与同菜单里的「完整规则」（跳转规则编辑页）并列
 
 **新增文件**
-- `gkd-app/src/commonMain/kotlin/li/gkd/app/ui/SimpleRuleDialog.kt` — 简易规则弹窗（文字 / ID 输入、「通过返回键关闭」开关、输入示例）
+- `gkd-app/src/commonMain/kotlin/li/gkd/app/ui/SimpleRuleDialog.kt` — 简易规则弹窗（定位 / 关闭输入、示例回填、bounds 帮助、如何快照）
+- `gkd-app/src/commonMain/kotlin/li/gkd/app/util/SimpleRuleSelectors.kt` — 输入到选择器的纯函数
+- `gkd-app/src/commonMain/kotlin/li/gkd/app/ui/component/GkQsTileTutorialDialog.kt` — 磁贴教程弹窗（AI 工作台与简易规则共用）
+- `gkd-app/src/jvmTest/kotlin/li/gkd/app/util/SimpleRuleSelectorsTest.kt` — 生成的选择器必须通过语法与类型校验
 
 **改动文件**
-- `gkd-app/src/commonMain/kotlin/li/gkd/app/ui/AppConfigPage.kt` — 右下角悬浮按钮展开菜单新增「简易规则 / 完整规则」入口
-- `gkd-app/src/commonMain/kotlin/li/gkd/app/ui/AppConfigVm.kt` — 新增 `addSimpleRule`，生成规则组并追加到本地订阅
-- `gkd-app/src/main/res/values/strings.xml` — `rule_add_simple` / `rule_add_full` / `simple_rule_*` 文案
+- `gkd-app/src/commonMain/kotlin/li/gkd/app/ui/subscription/AppConfigPage.kt` — 右下角悬浮按钮展开菜单新增「简易规则 / 完整规则」入口
+- `gkd-app/src/commonMain/kotlin/li/gkd/app/ui/subscription/AppConfigViewModel.kt` — 新增 `addSimpleRule(dialogLocator, closeLocator)`，生成规则组并追加到本地订阅
+- `gkd-app/src/commonMain/kotlin/li/gkd/app/feature/ai/AiSnapshotPickerPage.kt` — 组件详情字段由「区域」改为「区域bounds」
+- `gkd-app/src/commonMain/kotlin/li/gkd/app/ui/home/DashboardPage.kt` — 首页「如何使用李跳跳简易规则」卡片与步骤弹窗
+- `gkd-app/src/commonMain/composeResources/values/strings.xml` — `simple_rule_*` / `dashboard_simple_rule_guide_*` 文案
 
 ### 12. 无障碍开机自愈
 
@@ -132,12 +154,32 @@
 - 工作模式页文案说明「连接一次特权服务（Shizuku 即可）」
 
 **新增文件**
-- `gkd-app/src/commonMain/kotlin/li/gkd/app/service/BootRestoreReceiver.kt`
+- `gkd-app/src/androidMain/kotlin/li/gkd/app/receiver/BootReceiver.kt`
 
 **改动文件**
 - `gkd-app/src/main/AndroidManifest.xml` — `RECEIVE_BOOT_COMPLETED` 权限与 receiver
 - `gkd-app/src/commonMain/kotlin/li/gkd/app/priv/PrivilegeContext.kt` — `ensureWriteSecureSettings`
 - `gkd-app/src/main/res/values/strings.xml` — 工作模式说明文案
+
+### 13. 存储根目录：内部存储 + 一次性迁移
+
+上游 v1.13.1（`77f23ffd`）起，Android 数据根固定为 `app.filesDir`，不再在内部/外部之间二选一。首次启动若有旧外部数据，`ExternalStorageMigration` 先暂存到 `noBackupFilesDir/external-migration`，用 SHA-256 校验后发布到内部；`db` / `store` / `subscription` 先可用，历史目录后台迁移，全部提交后才删除外部原件并写 `.gkd`。v1.13.2（`78412c74`）允许迁移覆盖内部同名文件。
+
+Plus 直接采用这套实现，删除原先的占位识别、自动切回外部和设置页手动恢复。备份导入仍要求 `db.json`：日志包（`db/gkd.db` + `log/`）提示「这是日志压缩包，不是备份文件」，缺 `db.json` 无法恢复订阅。
+
+**改动文件**
+- `gkd-app/src/androidMain/kotlin/li/gkd/app/storage/ExternalStorageMigration.kt` — 日志化迁移
+- `gkd-app/src/androidMain/kotlin/li/gkd/app/util/AndroidStorage.kt` — 内部根 + `initialize()` 后台迁移历史
+- `gkd-app/src/commonMain/kotlin/li/gkd/app/storage/AppStorageLayout.kt` — `HistoryDirectory` 与 `awaitHistoryMigration`
+- `gkd-app/src/androidMain/kotlin/li/gkd/app/App.kt` — `onCreate` 先 `AndroidStorage.initialize()`
+- 快照 / 崩溃 / 诊断 / 日志导出等待对应历史目录迁移完成
+
+**Plus 保留**
+- `gkd-app/src/commonMain/kotlin/li/gkd/app/backup/BackupManager.kt` — `db.json` 必需 + 日志包识别
+- `gkd-app/src/commonMain/kotlin/li/gkd/app/storage/FileOperationIssue.kt` — `LogArchive` / `MissingDatabase`
+- `gkd-app/src/jvmTest/kotlin/li/gkd/app/backup/BackupImportValidationTest.kt`
+
+> 已被旧版 `.gkd` 误切、内部已有真实数据的设备，官方迁移不会回退外部数据，需要 Root 删标记或恢复备份。
 
 ---
 
@@ -163,10 +205,10 @@
 
 ## 三、测试
 
-- `gkd-app/src/test/kotlin/li/gkd/app/util/AiThinkingUtilsTest.kt` — 校验思考参数按模型名翻译
-- `gkd-app/src/test/kotlin/li/gkd/app/util/AiMaxTokensUtilsTest.kt` — 校验 Max Tokens 抬底 / 截断翻倍 / 上限回退
-- `gkd-app/src/test/kotlin/li/gkd/app/util/FolderExtTest.kt` — 校验日志脱敏规则
-- `gkd-app/src/test/kotlin/li/gkd/app/util/BackupUtilsTest.kt` — 校验备份数据保留真实 apiKey（不被脱敏）
+- `gkd-app/src/androidHostTest/kotlin/li/gkd/app/util/AiThinkingUtilsTest.kt` — 校验思考参数按模型名翻译
+- `gkd-app/src/androidHostTest/kotlin/li/gkd/app/util/AiMaxTokensUtilsTest.kt` — 校验 Max Tokens 抬底 / 截断翻倍 / 上限回退
+- `gkd-app/src/androidHostTest/kotlin/li/gkd/app/util/FolderExtTest.kt` — 校验日志脱敏规则
+- `gkd-app/src/androidHostTest/kotlin/li/gkd/app/util/BackupUtilsTest.kt` — 校验备份数据保留真实 apiKey（不被脱敏）
 
 ---
 

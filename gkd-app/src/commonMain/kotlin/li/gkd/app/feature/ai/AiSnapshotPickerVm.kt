@@ -8,12 +8,13 @@ import li.gkd.app.app.applicationScope
 import li.gkd.app.model.ComplexSnapshot
 import li.gkd.app.model.NodeInfo
 import li.gkd.app.snapshot.SnapshotStore
+import li.gkd.app.storage.HistoryDirectory
+import li.gkd.app.storage.appStorage
 import li.gkd.app.ui.state.BaseViewModel
 import li.gkd.app.ui.share.launchUi
 import li.gkd.app.util.AiRuleGenerator
 import li.gkd.app.logging.LogUtils
 import li.gkd.app.util.keepNullJson
-import li.gkd.app.ui.share.launchUi
 
 fun NodeInfo.toSelectedComponent(): AiSelectedComponent = AiSelectedComponent(
     text = attr.text,
@@ -33,6 +34,8 @@ class AiSnapshotPickerVm : BaseViewModel() {
     fun loadSnapshot(snapshotId: Long) {
         if (snapshotMutable.value?.id == snapshotId) return
         scope.launchUi {
+            // 外部旧数据的快照还在后台迁移，没迁完时直接读会得到空目录
+            appStorage().awaitHistoryMigration(HistoryDirectory.Snapshot)
             val loaded = withContext(Dispatchers.IO) {
                 runCatching {
                     keepNullJson.decodeFromString<ComplexSnapshot>(
@@ -80,7 +83,11 @@ class AiSnapshotPickerVm : BaseViewModel() {
                 snapshotId = snapshotId,
                 message = AiMessage(
                     role = "user",
-                    content = "请针对我选中的组件生成规则。",
+                    content = if (nodes.isEmpty()) {
+                        "请直接为该快照生成关闭/点击规则。"
+                    } else {
+                        "请针对我选中的组件生成规则。"
+                    },
                     time = System.currentTimeMillis(),
                 ),
             )

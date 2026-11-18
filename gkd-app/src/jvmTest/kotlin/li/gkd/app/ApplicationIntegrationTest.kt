@@ -50,6 +50,7 @@ import li.gkd.app.state.Loadable
 import li.gkd.app.storage.AppStorageLayout
 import li.gkd.app.storage.FileSource
 import li.gkd.app.storage.LogArchiveChecks
+import li.gkd.app.storage.StorageException
 import li.gkd.app.storage.appStorage
 import li.gkd.app.subscription.RawSubscriptionParser
 import li.gkd.app.subscription.SubscriptionDefaults
@@ -732,6 +733,28 @@ class ApplicationIntegrationTest {
             )
         } finally {
             malformedArchive.delete()
+        }
+        val logArchive = layout.sharedCache.resolve("log-archive.zip")
+        try {
+            ZipOutputStream(logArchive.outputStream()).use { zip ->
+                zip.putNextEntry(ZipEntry("db/gkd.db"))
+                zip.write(byteArrayOf(1, 2, 3))
+                zip.closeEntry()
+                zip.putNextEntry(ZipEntry("log/gkd-20261107.log"))
+                zip.write("log".toByteArray())
+                zip.closeEntry()
+            }
+            assertFailsWith<StorageException> {
+                manager.importData(FileSource.Local(logArchive))
+            }
+            assertEquals(
+                SubscriptionJson.json.encodeToString(original),
+                SubscriptionJson.json.encodeToString(
+                    repository.awaitSnapshot().subscriptions.getValue(-2),
+                ),
+            )
+        } finally {
+            logArchive.delete()
         }
         assertEquals("later", settings.settings.value.actionToast)
         manager.importData(FileSource.Uri(archive.toURI().toString()))

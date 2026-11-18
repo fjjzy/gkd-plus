@@ -81,9 +81,22 @@ class AiConversationVm : BaseViewModel() {
         toast("已选中 $count 个组件：发消息时可以用「组件 1」「组件 2」分别指代")
     }
 
-    /** 用户点「规则不生效，请重试」/「生成失败，请重试」 */
+    /** 用户点「规则没生效？重新生成」建议 /「生成失败，请重试」卡片 */
     fun retryRule(snapshotId: Long, feedback: String) {
         AiRuleGenerator.retryConversationRule(snapshotId, feedback)
+    }
+
+    /** 空会话里的「为我生成规则」：带一条用户消息直接发起生成，不用先输入 */
+    fun generateRule(snapshotId: Long) {
+        val components = AiConversationStore.get(snapshotId)?.selectedComponents.orEmpty()
+        sendUserMessage(
+            snapshotId = snapshotId,
+            text = if (components.isEmpty()) {
+                "请直接为该快照生成关闭/点击规则"
+            } else {
+                "请针对我选中的组件生成规则"
+            },
+        )
     }
 
     fun acceptRule(snapshotId: Long) {

@@ -2,7 +2,6 @@ package li.gkd.app.ui.settings
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import li.gkd.app.settings.SettingsRepository
 import li.gkd.app.ui.state.BaseViewModel
 
 class AdvancedViewModel : BaseViewModel() {
@@ -11,9 +10,5 @@ class AdvancedViewModel : BaseViewModel() {
 
     fun setShowTrackNotice(value: Boolean) {
         showTrackNotice.value = value
-    }
-
-    fun setAiEnable(enabled: Boolean) {
-        SettingsRepository.updateSettings { it.copy(aiEnable = enabled) }
     }
 }

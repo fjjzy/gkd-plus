@@ -6,10 +6,6 @@ import li.gkd.app.ui.share.launchUi
 
 class AiWorkbenchVm : BaseViewModel() {
 
-    fun setAiEnable(enabled: Boolean) {
-        SettingsRepository.updateSettings { it.copy(aiEnable = enabled) }
-    }
-
     fun setAiTileDirectPicker(enabled: Boolean) {
         SettingsRepository.updateSettings { it.copy(aiTileDirectPicker = enabled) }
     }

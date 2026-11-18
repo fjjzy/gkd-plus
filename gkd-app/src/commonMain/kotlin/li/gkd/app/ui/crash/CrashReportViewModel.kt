@@ -9,6 +9,8 @@ import li.gkd.app.crash.CrashData
 import li.gkd.app.crash.FileCrashStorage
 import li.gkd.app.resources.*
 import li.gkd.app.state.Loadable
+import li.gkd.app.storage.HistoryDirectory
+import li.gkd.app.storage.appStorage
 import li.gkd.app.ui.state.BaseViewModel
 import org.jetbrains.compose.resources.getString
 
@@ -38,11 +40,13 @@ class CrashReportViewModel(
 
     private val initialLoadJob =
         scope.launch(Dispatchers.IO) {
+            appStorage().awaitHistoryMigration(HistoryDirectory.Crash)
             crashDataState.value = Loadable.Ready(FileCrashStorage.load())
         }
 
     suspend fun deleteCrash(crashData: CrashData) {
         initialLoadJob.join()
+        appStorage().awaitHistoryMigration(HistoryDirectory.Crash)
         val deleted =
             withContext(Dispatchers.IO) {
                 FileCrashStorage.delete(crashData)
@@ -61,6 +65,7 @@ class CrashReportViewModel(
 
     suspend fun deleteAllCrashes() {
         initialLoadJob.join()
+        appStorage().awaitHistoryMigration(HistoryDirectory.Crash)
         val deleted =
             withContext(Dispatchers.IO) {
                 FileCrashStorage.deleteAll()
@@ -76,6 +81,7 @@ class CrashReportViewModel(
     }
 
     private suspend fun reloadAfterDeleteFailure() {
+        appStorage().awaitHistoryMigration(HistoryDirectory.Crash)
         crashDataState.value =
             Loadable.Ready(
                 withContext(Dispatchers.IO) { FileCrashStorage.load() },

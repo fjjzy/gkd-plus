@@ -2,13 +2,13 @@ package li.gkd.app.feature.ai
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,12 +16,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.draw.clip
@@ -43,17 +45,20 @@ import li.gkd.app.settings.SettingsRepository.settings
 import li.gkd.app.platform.openExternalUri
 import li.gkd.app.resources.*
 import li.gkd.app.ui.image.GkAppIcon
+import li.gkd.app.ui.component.GkAlertDialog
 import li.gkd.app.ui.component.GkAppNameText
 import li.gkd.app.ui.component.GkEmptyState
 import li.gkd.app.ui.component.GkIconButton
 import li.gkd.app.ui.component.GkIcons
 import li.gkd.app.ui.component.GkPageBottomSpace
+import li.gkd.app.ui.component.GkQsTileTutorialDialog
 import li.gkd.app.ui.component.GkSettingItem
 import li.gkd.app.ui.component.GkTextSwitch
 import li.gkd.app.ui.component.GkTopAppBar
 import li.gkd.app.ui.style.itemHorizontalPadding
 import li.gkd.app.ui.style.surfaceCardColors
 import li.gkd.app.util.throttle
+import org.jetbrains.compose.resources.stringResource
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -65,8 +70,12 @@ fun AiWorkbenchPage() {
     val store by settings.collectAsStateWithLifecycle()
     val conversations by AiConversationStore.conversationsFlow.collectAsStateWithLifecycle()
     var showAiConfigDialog by remember { mutableStateOf(false) }
+    var showTileTutorial by remember { mutableStateOf(false) }
     var deleteRequest by remember { mutableStateOf<AiConversation?>(null) }
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    if (showTileTutorial) {
+        GkQsTileTutorialDialog(onDismiss = { showTileTutorial = false })
+    }
     if (showAiConfigDialog) {
         AiSettingsDialog(
             aiConfig = store.aiConfig,
@@ -131,16 +140,13 @@ fun AiWorkbenchPage() {
             item(key = "ai-settings") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     GkTextSwitch(
-                        title = "AI 自动识别规则",
-                        subtitle = "无障碍自动截图、音量键截图时自动识别并生成规则",
-                        checked = store.aiEnable,
-                        onCheckedChange = vm::setAiEnable,
-                    )
-                    GkTextSwitch(
                         title = "快照磁贴直达选组件",
                         subtitle = "点击快照磁贴后跳过菜单，直接进入「我来选择」",
                         checked = store.aiTileDirectPicker,
-                        onCheckedChange = vm::setAiTileDirectPicker,
+                        onCheckedChange = { enabled ->
+                            vm.setAiTileDirectPicker(enabled)
+                            if (enabled) showTileTutorial = true
+                        },
                     )
                     GkSettingItem(
                         title = "AI 规则设置",
@@ -265,3 +271,4 @@ private fun ConversationCard(
 }
 
 private val conversationTimeFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+

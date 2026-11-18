@@ -225,6 +225,7 @@ class App : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        AndroidStorage.initialize()
         AndroidToastUtils.init()
         installCrashHandler()
         Db.initialize(this, AndroidStorage.storage.database.absolutePath)

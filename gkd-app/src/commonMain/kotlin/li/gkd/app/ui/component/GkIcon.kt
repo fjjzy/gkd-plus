@@ -32,6 +32,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.AutoMode
+import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material.icons.outlined.BrightnessAuto
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Check
@@ -49,6 +50,7 @@ import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.RemoveCircleOutline
 import androidx.compose.material.icons.outlined.RocketLaunch
 import androidx.compose.material.icons.outlined.Schedule
@@ -389,4 +391,10 @@ object GkIcons {
 
     val Check
         get() = Icons.Outlined.Check
+
+    val BatteryFull
+        get() = Icons.Outlined.BatteryFull
+
+    val PowerSettingsNew
+        get() = Icons.Outlined.PowerSettingsNew
 }

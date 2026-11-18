@@ -3,6 +3,7 @@ package li.gkd.app.util
 import android.app.Service
 import android.content.ComponentName
 import android.content.Intent
+import android.os.Build
 import android.provider.Settings
 import androidx.core.net.toUri
 import kotlin.reflect.KClass
@@ -11,6 +12,7 @@ import li.gkd.app.app
 import li.gkd.app.logging.LogUtils
 import li.gkd.app.permission.PermissionStates
 import li.gkd.app.platform.lifecycle.MainActivityVisibility
+import li.gkd.app.priv.PrivilegeContext
 import li.gkd.app.resources.*
 import li.songe.codeorigin.CallSite
 
@@ -34,10 +36,16 @@ object IntentUtils {
     }
 
     /**
-     * 各厂商的自启动管理页没有统一 API，只能按顺序逐个探测；
-     * 都打不开时退回应用详情，由用户自行查找。
+     * 各厂商的自启动管理页没有统一 API，只能按顺序逐个探测。
+     * 都打不开时：ColorOS 跳系统设置首页（应用详情里没有自启动入口，跳过去是死路），
+     * 其余厂商退回应用详情。
      */
     fun openAutoStartSettings(): Boolean {
+        // MIUI/HyperOS 的自启动开关就在应用详情页里，不必再跳安全中心的自启动列表
+        if (isMiuiFamily()) {
+            openAppDetailsSettings()
+            return true
+        }
         for (intent in autoStartIntents) {
             try {
                 app.startActivity(intent)
@@ -46,8 +54,34 @@ object IntentUtils {
                 LogUtils.d("openAutoStartSettings", e)
             }
         }
-        ToastUtils.show("未找到自启动设置页，已打开应用详情")
-        openAppDetailsSettings()
+        ToastUtils.show(autoStartFallbackHint())
+        // ColorOS 的应用详情页里没有自启动/耗电管理入口，跳过去等于把用户扔进死胡同
+        if (isColorOsBrand()) {
+            openSystemSettings()
+        } else {
+            openAppDetailsSettings()
+        }
+        return false
+    }
+
+    fun openSystemSettings() {
+        val intent =
+            Intent(Settings.ACTION_SETTINGS).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+        app.tryStartActivity(intent)
+    }
+
+    /**
+     * ColorOS 等系统把自启动页设为签名权限，普通应用无法启动。
+     * 仅有 Root 特权服务时通过 `am start` 以 uid 0 打开；Shizuku 的 shell 身份同样没有该权限。
+     */
+    suspend fun openAutoStartSettingsByRoot(privilegeContext: PrivilegeContext): Boolean {
+        if (privilegeContext.serverInfo.uid != 0 || !isColorOsBrand()) return false
+        for (intent in autoStartIntents) {
+            val component = intent.component ?: continue
+            if (privilegeContext.startActivityByRoot(component)) return true
+        }
         return false
     }
 
@@ -88,8 +122,29 @@ object IntentUtils {
 }
 
 
-/** 按市场保有量排序；同一厂商的主入口在前，fallback 紧跟其后。 */
-private val autoStartIntents by lazy {
+/** MIUI/HyperOS 把自启动开关放在应用详情页，没有独立的自启动列表入口 */
+private fun isMiuiFamily(): Boolean =
+    Build.MANUFACTURER.equals("xiaomi", ignoreCase = true) ||
+        Build.BRAND.equals("xiaomi", ignoreCase = true) ||
+        Build.BRAND.equals("redmi", ignoreCase = true) ||
+        Build.BRAND.equals("poco", ignoreCase = true)
+
+private fun isColorOsBrand(): Boolean {
+    val brand = "${Build.MANUFACTURER} ${Build.BRAND}".lowercase()
+    return brand.contains("oppo") ||
+        brand.contains("oneplus") ||
+        brand.contains("realme") ||
+        brand.contains("oplus")
+}
+
+private fun autoStartFallbackHint(): String =
+    if (isColorOsBrand()) {
+        Res.string.keep_alive_guide_autostart_fallback_oppo.getSync()
+    } else {
+        Res.string.keep_alive_guide_autostart_fallback.getSync()
+    }
+
+/** 按市场保有量排序；同一厂商的主入口在前，fallback 紧跟其后。 */private val autoStartIntents by lazy {
     listOf(
         autoStartComponent("com.oplus.battery", "com.oplus.startupapp.view.StartupAppListActivity"),
         autoStartAction("com.oplus.battery.permission.startup.StartupAppListActivity", "com.oplus.battery"),

@@ -26,7 +26,7 @@ import li.gkd.db.SubscriptionConfigSnapshot
 import li.gkd.db.SubscriptionConfigStore
 
 private data class PreparedBackup(
-    val dbData: SubscriptionConfigSnapshot?,
+    val dbData: SubscriptionConfigSnapshot,
     val storeEntries: Map<String, String>,
     val subscriptions: List<RawSubscription>,
 )
@@ -113,7 +113,7 @@ object BackupManager {
                 try {
                     Db.withTransaction {
                         val skipped =
-                            prepared.dbData?.let { SubscriptionConfigStore.merge(it) } ?: 0
+                            SubscriptionConfigStore.merge(prepared.dbData)
                         subscriptions.forEach { SubscriptionPersistence.save(it) }
                         skipped
                     }
@@ -131,14 +131,20 @@ object BackupManager {
     private suspend fun prepareBackup(unzipDir: File): PreparedBackup =
         withContext(Dispatchers.IO) {
             val dbFile = unzipDir.resolve("db.json")
+            if (!dbFile.isFile) {
+                // 日志包里有 db/gkd.db、log/、metadata/，但没有备份格式的 db.json；不能当成备份导入。
+                throw StorageException(
+                    if (looksLikeLogArchive(unzipDir)) {
+                        BackupIssue.LogArchive
+                    } else {
+                        BackupIssue.MissingDatabase
+                    },
+                )
+            }
+            val text = dbFile.readText()
             val dbData =
-                if (dbFile.exists() && dbFile.isFile) {
-                    val text = dbFile.readText()
-                    withContext(Dispatchers.Default) {
-                        BackupFormat.decode(text).toSnapshot()
-                    }
-                } else {
-                    null
+                withContext(Dispatchers.Default) {
+                    BackupFormat.decode(text).toSnapshot()
                 }
             val storeEntries =
                 SettingsRepository.backupFilenames.mapNotNull { filename ->
@@ -188,4 +194,9 @@ object BackupManager {
                 subscriptions = subscriptions,
             )
         }
+
+    private fun looksLikeLogArchive(dir: File): Boolean =
+        dir.resolve("db/gkd.db").isFile ||
+            dir.resolve("log").isDirectory ||
+            dir.resolve("metadata/gkd.json").isFile
 }

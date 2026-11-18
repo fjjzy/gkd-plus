@@ -33,6 +33,8 @@ import li.gkd.app.model.GkdAction
 import li.gkd.app.resources.*
 import li.gkd.app.snapshot.SnapshotCaptureOutcome
 import li.gkd.app.snapshot.SnapshotStore
+import li.gkd.app.storage.HistoryDirectory
+import li.gkd.app.storage.appStorage
 import li.gkd.app.subscription.RawSubscriptionParser
 import li.gkd.app.subscription.SubscriptionRepository
 import li.gkd.db.Db
@@ -67,6 +69,7 @@ fun Application.configureInspectionServer(
             registerSubscriptionRoutes(jsonFormat)
             post("/getServerInfo") { call.respond(serverInfo()) }
             post("/getSnapshot") {
+                appStorage().awaitHistoryMigration(HistoryDirectory.Snapshot)
                 val data = call.receive<ReqId>()
                 val fp = SnapshotStore.snapshotFile(data.id)
                 if (!fp.exists()) {
@@ -75,6 +78,7 @@ fun Application.configureInspectionServer(
                 call.respondFile(fp)
             }
             post("/getScreenshot") {
+                appStorage().awaitHistoryMigration(HistoryDirectory.Snapshot)
                 val data = call.receive<ReqId>()
                 val fp = SnapshotStore.screenshotFile(data.id)
                 if (!fp.exists()) {

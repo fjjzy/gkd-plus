@@ -72,6 +72,7 @@ import li.gkd.app.ui.navigation.UpsertRuleGroupRoute
 import li.gkd.app.ui.platform.GkBackHandler
 import li.gkd.app.ui.share.ListPlaceholder
 import li.gkd.app.ui.share.launchUi
+import li.gkd.app.util.toast
 import li.gkd.app.ui.style.scaffoldPadding
 import li.gkd.app.util.SortUtils
 import li.gkd.app.util.ToastUtils
@@ -292,6 +293,18 @@ fun AppConfigPage(
         showDisabledRules,
         enabled = !focus.pending,
     )
+
+    if (showSimpleRuleDialog) {
+        SimpleRuleDialog(
+            onDismissRequest = { showSimpleRuleDialog = false },
+            onSubmit = { dialogLocator, closeLocator ->
+                showSimpleRuleDialog = false
+                scope.launchUi {
+                    vm.addSimpleRule(dialogLocator, closeLocator)?.let { toast(it) }
+                }
+            },
+        )
+    }
 
     GkScaffold(
         modifier = Modifier.gkTopAppBarScroll(scrollBehavior),

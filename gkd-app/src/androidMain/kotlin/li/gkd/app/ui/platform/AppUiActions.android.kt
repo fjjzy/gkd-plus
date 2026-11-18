@@ -45,7 +45,10 @@ actual fun openAppDetails() {
     IntentUtils.openAppDetailsSettings()
 }
 
-actual fun openAutoStartSettings() {
+actual suspend fun openAutoStartSettings() {
+    // ColorOS 13+ 的自启动页受签名权限保护，Root 时先尝试以 uid 0 启动
+    val context = privilegeContextFlow.value
+    if (context != null && IntentUtils.openAutoStartSettingsByRoot(context)) return
     IntentUtils.openAutoStartSettings()
 }
 

@@ -36,6 +36,8 @@ import li.gkd.app.subscription.RawSubscriptionParser
 import li.gkd.app.subscription.RawSubscription
 import li.gkd.app.settings.AiConfig
 import li.gkd.app.snapshot.SnapshotStore
+import li.gkd.app.storage.HistoryDirectory
+import li.gkd.app.storage.appStorage
 import li.gkd.app.subscription.SubscriptionRepository
 import li.gkd.app.feature.ai.AiConversation
 import li.gkd.app.feature.ai.AiConversationStore
@@ -163,9 +165,6 @@ private const val PROTOCOL_ANTHROPIC = "anthropic"
 
 /** AI 输出的选择器非法时，最多再重试几次（总数 = 1 + MAX_RULE_RETRY） */
 private const val MAX_RULE_RETRY = 2
-
-/** 规则入库后跟在后面的重试入口 */
-private const val RETRY_CARD_RULE_NOT_WORKING = "规则不生效，请重试"
 
 /** 生成失败后的重试入口 */
 private const val RETRY_CARD_GENERATE_FAILED = "生成失败，请重试"
@@ -640,6 +639,8 @@ object AiRuleGenerator {
             val prompt = loadPrompt()
             // 选中的目标组件作为会话级上下文放进 system 消息（格式与 prompt 的「上下文说明」一致）
             val selected = AiConversationStore.get(snapshotId)?.selectedComponents.orEmpty()
+            // 外部旧数据的快照还在后台迁移，没迁完时读不到文件
+            appStorage().awaitHistoryMigration(HistoryDirectory.Snapshot)
             // 发送版快照：裁剪字段；有选中组件时只发相关子树，完整快照仍保留在本地
             val snapshotText = withContext(Dispatchers.IO) {
                 SnapshotStore.snapshotFile(snapshotId).readText()
@@ -763,7 +764,7 @@ object AiRuleGenerator {
                             } else {
                                 if (autoAccept) {
                                     // 自动来源：直接入库并标记「已加入」，用户在工作台能看到这轮对话和结果
-                                    insertRuleToSubscription(rule)
+                                    val groupKeys = insertRuleToSubscription(rule)
                                     LogUtils.d(
                                         "AI rule accepted: snapshotId=$snapshotId, ruleChars=${ruleText.length}"
                                     )
@@ -774,10 +775,10 @@ object AiRuleGenerator {
                                             content = AiConversation.ACCEPTED_RULE_MESSAGE,
                                             time = System.currentTimeMillis(),
                                             kind = AiMessage.KIND_ACCEPTED_RULE,
+                                            groupKeys = groupKeys,
                                         ),
                                         status = AiConversation.STATUS_ACCEPTED,
                                     )
-                                    appendRetryCard(snapshotId, RETRY_CARD_RULE_NOT_WORKING)
                                     if (notifyUser) {
                                         ToastUtils.show("AI 规则已生成并加入本地规则")
                                     }
@@ -894,8 +895,8 @@ object AiRuleGenerator {
     }
 
     /**
-     * 用户点「规则不生效，请重试」/「生成失败，请重试」：
-     * 把卡片文案本身作为用户反馈追加到会话，再发起新一轮生成。
+     * 用户点「规则没生效？重新生成」建议 /「生成失败，请重试」卡片：
+     * 把反馈文案追加到会话，再发起新一轮生成。
      * 放在 beforeGenerate 里，重复点击时 runningJobs 已经拦下，不会写出多余消息。
      */
     fun retryConversationRule(snapshotId: Long, feedback: String) = launchConversationRule(
@@ -983,6 +984,8 @@ object AiRuleGenerator {
             }
         }
         val staticError = runCatching {
+            // 迁移未完成读不到快照时不能让 runCatching 吞掉，否则会跳过校验直接入库
+            appStorage().awaitHistoryMigration(HistoryDirectory.Snapshot)
             val snapshotText = withContext(Dispatchers.IO) {
                 SnapshotStore.snapshotFile(snapshotId).readText()
             }
@@ -1003,7 +1006,7 @@ object AiRuleGenerator {
             ToastUtils.show("规则在当前快照中不可用，请重试")
             return
         }
-        insertRuleToSubscription(rule)
+        val groupKeys = insertRuleToSubscription(rule)
         AiConversationStore.appendMessage(
             snapshotId = snapshotId,
             message = AiMessage(
@@ -1011,10 +1014,10 @@ object AiRuleGenerator {
                 content = AiConversation.ACCEPTED_RULE_MESSAGE,
                 time = System.currentTimeMillis(),
                 kind = AiMessage.KIND_ACCEPTED_RULE,
+                groupKeys = groupKeys,
             ),
             status = AiConversation.STATUS_SUCCESS,
         )
-        appendRetryCard(snapshotId, RETRY_CARD_RULE_NOT_WORKING)
         ToastUtils.show("规则已加入本地订阅")
     }
 
@@ -1424,8 +1427,9 @@ object AiRuleGenerator {
         append("\n只输出修正后的完整规则，不要解释。")
     }
 
-    private suspend fun insertRuleToSubscription(newSubs: RawSubscription) {
-        val newApp = newSubs.apps.firstOrNull() ?: return
+    private suspend fun insertRuleToSubscription(newSubs: RawSubscription): List<Int> {
+        val newApp = newSubs.apps.firstOrNull() ?: return emptyList()
+        var insertedGroupKeys = emptyList<Int>()
         SubscriptionRepository.update(SubscriptionIds.LOCAL) { currentSubs ->
             val existingApp = currentSubs.apps.find { it.id == newApp.id }
 
@@ -1436,6 +1440,7 @@ object AiRuleGenerator {
                 val newKey = nextKey++
                 group.copy(key = newKey)
             }
+            insertedGroupKeys = fixedGroups.map { it.key }
             val fixedApp = newApp.copy(groups = fixedGroups)
 
             if (existingApp != null) {
@@ -1449,6 +1454,7 @@ object AiRuleGenerator {
                 )
             }
         }
+        return insertedGroupKeys
     }
 }
 

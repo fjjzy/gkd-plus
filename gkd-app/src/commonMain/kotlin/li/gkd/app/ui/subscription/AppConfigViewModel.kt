@@ -41,6 +41,9 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import li.gkd.app.subscription.SubscriptionEditResult
 import li.gkd.app.subscription.SubscriptionInputParser
+import li.gkd.app.util.buildSimpleRuleMatches
+import li.gkd.app.util.isInvalidSimpleRuleBounds
+import li.gkd.app.util.simpleRuleAction
 
 data class AppRuleSubscription(val subsItem: SubsItem, val subscription: RawSubscription)
 
@@ -91,26 +94,26 @@ class AppConfigViewModel(
     }
 
     /**
-     * 简易规则：根据定位文字 / 控件 ID 生成一条规则并追加到本地订阅。
-     * [backToClose] 为 true 时动作为返回键关闭，否则为点击匹配到的元素。
+     * 简易规则：根据弹窗定位和关闭方式生成一条规则并追加到本地订阅。
+     * [closeLocator] 为空时动作为返回键，否则点击匹配到的关闭控件。
      * 返回错误信息；成功时返回 null。
      */
-    suspend fun addSimpleRule(text: String, id: String, backToClose: Boolean): String? {
-        val trimmedId = id.trim()
-        val trimmedText = text.trim()
-        val selector =
-            when {
-                trimmedId.isNotEmpty() -> "[id=\"${escapeSelectorValue(trimmedId)}\"]"
-                trimmedText.isNotEmpty() -> "[text=\"${escapeSelectorValue(trimmedText)}\"]"
-                else -> return Res.string.simple_rule_input_required.getSync()
-            }
-        val action = if (backToClose) "back" else "click"
+    suspend fun addSimpleRule(dialogLocator: String, closeLocator: String): String? {
+        val dialogText = dialogLocator.trim()
+        val closeText = closeLocator.trim()
+        if (isInvalidSimpleRuleBounds(dialogText) || isInvalidSimpleRuleBounds(closeText)) {
+            return Res.string.simple_rule_bounds_invalid.getSync()
+        }
+        val matches = buildSimpleRuleMatches(dialogText, closeText)
+            ?: return Res.string.simple_rule_input_required.getSync()
+        val action = simpleRuleAction(closeText)
+        val name = dialogText.ifEmpty { closeText }
         val groupJson =
             buildJsonObject {
-                put("name", trimmedText.ifEmpty { trimmedId })
+                put("name", name)
                 putJsonArray("rules") {
                     addJsonObject {
-                        put("matches", selector)
+                        put("matches", matches)
                         put("action", action)
                     }
                 }
@@ -146,9 +149,6 @@ class AppConfigViewModel(
             is SubscriptionEditResult.Rejected -> result.reason.messageResource.getSync()
         }
     }
-
-    private fun escapeSelectorValue(value: String): String =
-        value.replace("\\", "\\\\").replace("\"", "\\\"")
 
     val uiState: StateFlow<Loadable<AppConfigUiState>> =
         SubscriptionRepository.snapshotFlow

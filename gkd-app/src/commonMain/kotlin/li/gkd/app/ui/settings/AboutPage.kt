@@ -1,6 +1,7 @@
 package li.gkd.app.ui.settings
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -60,6 +61,7 @@ import li.gkd.app.ui.share.LocalDarkTheme
 import li.gkd.app.ui.style.itemPadding
 import li.gkd.app.ui.style.titleItemPadding
 import li.gkd.app.util.ToastUtils
+import li.gkd.app.util.throttle
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
 
@@ -263,7 +265,11 @@ fun AboutPage() {
 
                 Row(
                     modifier =
-                        Modifier.clickable(onClick = { mainVm.updateStatus.checkUpdate(true) })
+                        Modifier.combinedClickable(
+                                onClick = { mainVm.updateStatus.checkUpdate(true) },
+                                // 长按用于预览更新弹窗，不比较版本
+                                onLongClick = throttle { mainVm.updateStatus.previewUpdate() },
+                            )
                             .fillMaxWidth()
                             .itemPadding(),
                     horizontalArrangement = Arrangement.SpaceBetween,

@@ -10,6 +10,8 @@ import li.gkd.app.resources.*
 import li.gkd.app.snapshot.SnapshotStore
 import li.gkd.app.snapshot.platform.saveImageToAlbum
 import li.gkd.app.storage.FileExports
+import li.gkd.app.storage.HistoryDirectory
+import li.gkd.app.storage.appStorage
 import li.gkd.app.storage.readFileBytes
 import li.gkd.app.ui.MainViewModel
 import li.gkd.app.ui.component.DialogRequests
@@ -87,8 +89,10 @@ class SnapshotActionCoordinator(
         return saved
     }
 
-    private suspend fun save(snapshot: Snapshot, album: Boolean): PlatformResult<Boolean> =
-        if (album) {
+    private suspend fun save(snapshot: Snapshot, album: Boolean): PlatformResult<Boolean> {
+        // 外部旧数据的快照还在后台迁移，没迁完时拿到的图是空的
+        appStorage().awaitHistoryMigration(HistoryDirectory.Snapshot)
+        return if (album) {
             when (saveImageToAlbum(SnapshotStore.screenshotFile(snapshot.id))) {
                 is PlatformResult.Success -> PlatformResult.Success(true)
                 PlatformResult.Unsupported -> PlatformResult.Unsupported
@@ -106,6 +110,7 @@ class SnapshotActionCoordinator(
                 consume = platform::save,
             )
         }
+    }
 
     override fun upload(snapshot: Snapshot) {
         scope.launch {

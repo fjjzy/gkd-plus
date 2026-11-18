@@ -78,8 +78,9 @@ fun captureScreenshotOnEvent(event: AccessibilityEvent) {
     selector.match(event, A11yEventNodeAdapter, MatchOptions(fastQuery = false)).let {
         if (it == null) return
     }
+    val aiEnabled = settings.value.aiEnable
     appScope.launchLogged {
-        SnapshotCaptureHost.capture(triggerAiRule = true)
+        SnapshotCaptureHost.capture(triggerAiRule = aiEnabled, recordAiSession = aiEnabled)
     }
 }
 
@@ -94,8 +95,12 @@ private fun createVolumeReceiver() =
                 val t = System.currentTimeMillis()
                 if (t - lastVolumeTriggerTime > 3000 && !ScreenUtils.isLocked()) {
                     lastVolumeTriggerTime = t
+                    val aiEnabled = settings.value.aiEnable
                     appScope.launchLogged {
-                        SnapshotCaptureHost.capture(triggerAiRule = true)
+                        SnapshotCaptureHost.capture(
+                            triggerAiRule = aiEnabled,
+                            recordAiSession = aiEnabled,
+                        )
                     }
                 }
             }

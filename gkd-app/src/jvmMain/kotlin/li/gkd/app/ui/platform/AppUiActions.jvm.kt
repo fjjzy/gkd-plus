@@ -37,6 +37,10 @@ actual fun openAppDetails() {
     ToastUtils.show(Res.string.platform_action_unsupported.getSync())
 }
 
+actual suspend fun openAutoStartSettings() {
+    ToastUtils.show(Res.string.platform_action_unsupported.getSync())
+}
+
 actual fun UiHost.launchApp(appId: String): PlatformResult<Boolean> = PlatformResult.Unsupported
 
 actual suspend fun openRecents() {

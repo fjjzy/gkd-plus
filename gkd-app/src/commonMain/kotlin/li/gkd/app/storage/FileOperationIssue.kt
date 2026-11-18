@@ -20,6 +20,8 @@ enum class BackupIssue(override val messageResource: StringResource) : FileOpera
     ArchiveTooLarge(Res.string.backup_archive_too_large),
     DuplicateSubscriptionId(Res.string.backup_duplicate_subscription_id),
     InvalidArchive(Res.string.backup_invalid_archive),
+    LogArchive(Res.string.backup_log_archive),
+    MissingDatabase(Res.string.backup_missing_database),
     SourceAccessDenied(Res.string.backup_reselect_file),
     UnknownRuleConfigType(Res.string.backup_unknown_rule_config_type),
     VersionUnsupported(Res.string.backup_version_unsupported),
