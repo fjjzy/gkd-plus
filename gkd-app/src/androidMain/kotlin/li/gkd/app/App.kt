@@ -12,6 +12,7 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.LauncherApps
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.database.ContentObserver
 import android.hardware.display.DisplayManager
 import android.hardware.input.InputManager
@@ -22,6 +23,7 @@ import android.os.PowerManager
 import android.os.Process.killProcess
 import android.os.Process.myPid
 import android.provider.Settings
+import android.util.Log
 import android.view.Display
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityManager
@@ -36,6 +38,8 @@ import kotlinx.coroutines.withContext
 import li.gkd.app.app.AppInfoRepository
 import li.gkd.app.crash.CrashMetadata
 import li.gkd.app.crash.CrashRecorder
+import li.gkd.app.crash.CrashRestartGuard
+import li.gkd.app.crash.FileCrashStorage
 import li.gkd.app.data.AndroidLogMetadata
 import li.gkd.app.data.appinfo.PackageAppCatalog
 import li.gkd.app.logging.LogUtils
@@ -44,11 +48,13 @@ import li.gkd.app.matching.input.initScreenEvents
 import li.gkd.app.notif.NotificationChannels
 import li.gkd.app.platform.lifecycle.MainActivityVisibility
 import li.gkd.app.platform.lifecycle.RuntimeStateSynchronizer
+import li.gkd.app.platform.overlay.KeepAliveOverlayCoordinator
 import li.gkd.app.priv.PrivilegeOwnerLifecycle
 import li.gkd.app.priv.gkdPrivilegeUiConfig
 import li.gkd.app.priv.initPrivilege
 import li.gkd.app.priv.requestPrivilegeRecovery
 import li.gkd.app.service.clearDebugSubscription
+import li.gkd.app.settings.syncSystemLanguage
 import li.gkd.app.snapshot.initVolumeSnapshotTrigger
 import li.gkd.app.subscription.SubscriptionDefaults
 import li.gkd.app.subscription.SubscriptionRepository
@@ -109,6 +115,7 @@ class App : Application() {
 
     override fun attachBaseContext(base: Context?) {
         super.attachBaseContext(base)
+        installCrashHandler()
         if (AndroidTarget.P) {
             HiddenApiBypass.addHiddenApiExemptions("L")
         }
@@ -226,8 +233,8 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
         AndroidStorage.initialize()
+        syncSystemLanguage()
         AndroidToastUtils.init()
-        installCrashHandler()
         Db.initialize(this, AndroidStorage.storage.database.absolutePath)
         AppInfoRepository.initialize()
         LogUtils.i()
@@ -244,15 +251,45 @@ class App : Application() {
                     META.versionCode,
                     META.versionName,
                 ),
-            )
+            ) { record ->
+                // Do not depend on storage migration or application initialization here.
+                listOf<() -> java.io.File?>(
+                        { filesDir.resolve("crash") },
+                        { filesDir.resolve("crash/temp") },
+                        { getExternalFilesDir(null)?.resolve("crash-export") },
+                    )
+                    .forEach { directory ->
+                        try {
+                            directory()?.let { FileCrashStorage.save(record, it) }
+                        } catch (failure: Exception) {
+                            Log.e("GKD", "Cannot save crash report", failure)
+                        }
+                    }
+            }
+        val restartGuard = CrashRestartGuard(filesDir.resolve("crash-restart-history"))
         Thread.setDefaultUncaughtExceptionHandler { t, e ->
+            recorder.record(t, e)
+            val allowRestart =
+                try {
+                    restartGuard.recordCrash(System.currentTimeMillis())
+                } catch (failure: Exception) {
+                    Log.e(
+                        "GKD",
+                        "Cannot persist crash restart history; automatic restart disabled",
+                        failure,
+                    )
+                    false
+                }
+            if (!allowRestart) {
+                PrivilegeOwnerLifecycle.blockCrashRestart()
+                Log.e("GKD", "Automatic restart disabled for this crash")
+            }
             ToastUtils.show(e.message ?: e.toString())
             LogUtils.e("UncaughtExceptionHandler", t, e)
             appScope.launchLogged(Dispatchers.IO) {
                 try {
-                    recorder.record(t, e)
                     delay(1500.milliseconds)
-                    if (MainActivityVisibility.isVisible) {
+                    if (allowRestart && MainActivityVisibility.isVisible) {
                         startLaunchActivity()
                         PrivilegeOwnerLifecycle.prepareAppRestart()
                     }
@@ -268,6 +305,7 @@ class App : Application() {
     }
 
     private fun initializeRuntimeComponents() {
+        KeepAliveOverlayCoordinator.initialize()
         NotificationChannels.initialize()
         PackageAppCatalog.initialize()
         initMatchingRuleObservers()
@@ -283,5 +321,10 @@ class App : Application() {
             clearDebugSubscription()
         }
         RuntimeStateSynchronizer.requestSync()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        syncSystemLanguage()
     }
 }

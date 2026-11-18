@@ -9,7 +9,7 @@ enum class HistoryDirectory(val path: String) {
     Log("log"),
 }
 
-/** Android-compatible relative paths. Hosts supply internal files/cache and private files roots. */
+/** Hosts supply the files, cache and private files roots. */
 class AppStorageLayout(
     private val files: File,
     private val cache: File,

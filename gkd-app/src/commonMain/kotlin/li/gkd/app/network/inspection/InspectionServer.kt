@@ -37,7 +37,6 @@ import li.gkd.app.storage.HistoryDirectory
 import li.gkd.app.storage.appStorage
 import li.gkd.app.subscription.RawSubscriptionParser
 import li.gkd.app.subscription.SubscriptionRepository
-import li.gkd.db.Db
 import li.gkd.db.SubsItem
 import li.gkd.db.SubscriptionIds
 import org.jetbrains.compose.resources.getString
@@ -71,6 +70,7 @@ fun Application.configureInspectionServer(
             post("/getSnapshot") {
                 appStorage().awaitHistoryMigration(HistoryDirectory.Snapshot)
                 val data = call.receive<ReqId>()
+                appStorage().awaitHistoryMigration(HistoryDirectory.Snapshot)
                 val fp = SnapshotStore.snapshotFile(data.id)
                 if (!fp.exists()) {
                     throw InspectionException(InspectionFailure.SnapshotNotFound)
@@ -80,6 +80,7 @@ fun Application.configureInspectionServer(
             post("/getScreenshot") {
                 appStorage().awaitHistoryMigration(HistoryDirectory.Snapshot)
                 val data = call.receive<ReqId>()
+                appStorage().awaitHistoryMigration(HistoryDirectory.Snapshot)
                 val fp = SnapshotStore.screenshotFile(data.id)
                 if (!fp.exists()) {
                     throw InspectionException(InspectionFailure.ScreenshotNotFound)
@@ -95,7 +96,7 @@ fun Application.configureInspectionServer(
             }
             post("/getSnapshots") {
                 val list =
-                    Db.snapshotDao.query().first().mapNotNull {
+                    SnapshotStore.observeSnapshots().first().mapNotNull {
                         try {
                             SnapshotStore.getMinSnapshot(it.id)
                         } catch (e: IOException) {
@@ -110,7 +111,7 @@ fun Application.configureInspectionServer(
             }
             post("/deleteSnapshot") {
                 val data = call.receive<ReqId>()
-                val allSnapshots = Db.snapshotDao.query().first()
+                val allSnapshots = SnapshotStore.observeSnapshots().first()
                 val snapshot = allSnapshots.find { it.id == data.id }
                 if (snapshot != null) {
                     SnapshotStore.delete(snapshot)

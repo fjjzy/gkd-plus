@@ -1,6 +1,9 @@
 package li.gkd.app.matching.diagnostics
 
 import kotlinx.serialization.Serializable
+import li.gkd.app.matching.input.ForegroundDecisionReason
+import li.gkd.app.matching.input.MatchEventKind
+import li.gkd.app.matching.input.MatchInput
 import li.gkd.app.settings.AutomatorMode
 
 @Serializable
@@ -125,6 +128,9 @@ data class MatchWindowEvent(
 )
 
 @Serializable
+data class MatchRejectedWindow(val appId: String?, val windowId: Int, val eventId: Long? = null)
+
+@Serializable
 data class MatchActionTarget(
     val windowId: Int,
     val appId: String?,
@@ -161,6 +167,46 @@ fun MatchTrace.isKeyTrace(): Boolean =
             operation?.name in keyOperationNames ||
             (operation == null && (stage != MatchStage.Idle || entrySource in keyEntrySources)))
 
+/** Failures and foreground/service evidence survive successful query and node traffic. */
+fun MatchTrace.isBoundaryTrace(): Boolean =
+    serviceConnection != null ||
+        pageObservation != null ||
+        taskObservation != null ||
+        rejectedWindow != null ||
+        reason == "accessibility_window_state_received" ||
+        (input?.input as? MatchInput.Accessibility)?.key?.kind == MatchEventKind.WindowState ||
+        inputDecision?.foreground?.let { decision ->
+            inputDecision.cancelWork || decision.reason in foregroundBoundaryReasons
+        } == true ||
+        nodePressure != null ||
+        stage == MatchStage.Failed ||
+        action?.result == false ||
+        reason in boundaryFailureReasons ||
+        operation?.outcome?.let { it !in successfulOperationOutcomes } == true
+
+private val foregroundBoundaryReasons =
+    setOf(
+        ForegroundDecisionReason.ForegroundConflict,
+        ForegroundDecisionReason.NodesConfirmed,
+        ForegroundDecisionReason.ActiveWindowConfirmed,
+        ForegroundDecisionReason.SurfaceConfirmed,
+        ForegroundDecisionReason.StaleObservationDiscarded,
+        ForegroundDecisionReason.SystemSurfaceEntered,
+        ForegroundDecisionReason.SystemSurfaceExited,
+    )
+
+private val boundaryFailureReasons =
+    setOf("root_unavailable", "foreground_wait_expired", "window_identity_pending")
+private val successfulOperationOutcomes =
+    setOf("returned", "null", "false", "matched", "not_matched", "success")
+
 private val keyOperationNames =
     setOf("Query", "Action", "RootWait", "SourceWait", "NodeRead:Root", "NodeRead:Source")
 private val keyEntrySources = setOf("root_read", "source_read")
+
+fun MatchTrace.isQueryFault(): Boolean =
+    serviceConnection?.event == MatchServiceEvent.Disconnected ||
+        stage == MatchStage.Failed ||
+        action?.result == false ||
+        reason in boundaryFailureReasons ||
+        operation?.outcome?.let { it !in successfulOperationOutcomes } == true

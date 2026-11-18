@@ -27,7 +27,7 @@ plugins {
     alias(libs.plugins.littlerobots.version)
 }
 
-extra["gkdVersionName"] = "1.13.0-plus.1"
+extra["gkdVersionName"] = "1.13.2-plus.1"
 
 extra["gkdVersionCode"] = 101
 

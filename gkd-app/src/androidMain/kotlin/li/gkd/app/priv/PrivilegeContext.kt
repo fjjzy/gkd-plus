@@ -14,8 +14,12 @@ import android.graphics.Bitmap
 import android.os.DeadObjectException
 import android.os.IBinder
 import android.os.Process
+import android.os.RemoteException
+import android.os.ServiceSpecificException
 import android.view.IWindowManager
+import android.window.WindowInfosListener
 import java.io.IOException
+import java.lang.reflect.Modifier
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -46,6 +50,33 @@ import priv.kit.core.PrivilegeUserServiceConnection
 import priv.kit.core.command.PrivilegeCommand
 import priv.kit.core.binder.PrivilegeBinderWrapper
 import priv.kit.input.PrivilegeInput
+
+private val missingWindowInfosCallbacks: List<String> by lazy {
+    val implemented =
+        PrivilegedSystemSurfaceListener::class.java.declaredMethods.filter {
+            !Modifier.isAbstract(it.modifiers) && !Modifier.isStatic(it.modifiers)
+        }
+    WindowInfosListener::class
+        .java
+        .declaredMethods
+        .filter { required ->
+            Modifier.isAbstract(required.modifiers) &&
+                implemented.none { method ->
+                    val canOverride =
+                        if (Modifier.isPublic(required.modifiers))
+                            Modifier.isPublic(method.modifiers)
+                        else if (Modifier.isProtected(required.modifiers))
+                            Modifier.isPublic(method.modifiers) ||
+                                Modifier.isProtected(method.modifiers)
+                        else false
+                    canOverride &&
+                        method.name == required.name &&
+                        method.returnType == required.returnType &&
+                        method.parameterTypes.contentEquals(required.parameterTypes)
+                }
+        }
+        .map { it.toString() }
+}
 
 class PrivilegeContext
 private constructor(
@@ -112,11 +143,19 @@ private constructor(
                         .collect { enabled ->
                             try {
                                 clear()
-                                if (enabled) {
-                                    val next = SurfaceSubscription()
-                                    subscription = next
-                                    userService.setSystemSurfaceListener(next)
+                                if (!enabled) return@collect
+                                val missing = missingWindowInfosCallbacks
+                                if (missing.isNotEmpty()) {
+                                    LogUtils.w(
+                                        "Skipping WindowInfosListener registration; missing callbacks:\n" +
+                                            missing.joinToString("\n"),
+                                        tag = "GkdSystemSurface",
+                                    )
+                                    return@collect
                                 }
+                                val next = SurfaceSubscription()
+                                subscription = next
+                                userService.setSystemSurfaceListener(next)
                             } catch (e: Exception) {
                                 subscription?.deactivate()
                                 LogUtils.w("System window observation unavailable", e)
@@ -288,6 +327,17 @@ private constructor(
 
     fun topCpn() = topTask()?.topActivity
 
+    fun accessibilityWindowPackage(windowId: Int): String? =
+        try {
+            userService.getAccessibilityWindowPackage(windowId, currentUserId)
+        } catch (e: RemoteException) {
+            LogUtils.w("Accessibility window package lookup failed", e)
+            null
+        } catch (e: ServiceSpecificException) {
+            LogUtils.w("Accessibility window package lookup failed", e)
+            null
+        }
+
     fun getUsers(excludeDying: Boolean = true): List<AppUser> {
         return userManager.getUsers(excludeDying)
     }
@@ -312,12 +362,8 @@ private constructor(
         }
     }
 
-    suspend fun tap(x: Float, y: Float, duration: Long = 0): Boolean? = injectInputIfPermitted {
-        if (duration > 0) {
-            inputManager.swipe(x, y, x, y, durationMillis = duration)
-        } else {
-            inputManager.tap(x, y)
-        }
+    suspend fun tap(x: Float, y: Float, durationMillis: Long): Boolean? = injectInputIfPermitted {
+        inputManager.tap(x, y, durationMillis = durationMillis)
     }
 
     suspend fun swipe(

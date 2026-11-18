@@ -124,6 +124,7 @@ data class MatchDiagnosticCapture(
         "foreground_candidate_ids_and_selected_definitions; optional_recorded_selector_access; optional_scheduler_rules_action_lifecycle; observed_evidence_only",
     val queryRecordings: List<MatchQueryRecording> = emptyList(),
     val droppedQueryRecordings: Long = 0,
+    val droppedQuerySummaries: Long = 0,
     val systemRecording: MatchSystemRecording? = null,
     val initialRules: List<MatchRuleIndex>? = null,
     val ruleDefinitions: Map<Long, MatchRuleDefinition> = emptyMap(),
@@ -138,4 +139,8 @@ data class MatchDiagnosticCapture(
     val droppedKeyEvents: Long = 0,
     val boundaryEvents: List<MatchTrace> = emptyList(),
     val droppedBoundaryEvents: Long = 0,
+    val accessibilitySettings: List<AccessibilitySettingRecord> = emptyList(),
+    val droppedAccessibilitySettings: Long = 0,
+    val sizeLimitBytes: Int = MATCH_DIAGNOSTIC_EXPORT_LIMIT_BYTES,
+    val omittedForSize: Map<String, Int> = emptyMap(),
 )

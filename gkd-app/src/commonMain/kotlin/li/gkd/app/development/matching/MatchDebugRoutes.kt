@@ -18,6 +18,7 @@ import li.gkd.app.matching.MatchingRuntime
 import li.gkd.app.matching.diagnostics.MatchDebugSnapshot
 import li.gkd.app.matching.diagnostics.MatchDiagnosticState
 import li.gkd.app.matching.diagnostics.matchForegroundSnapshot
+import li.gkd.app.matching.diagnostics.prepareDiagnosticArchive
 import li.gkd.app.util.JsonUtils
 
 @Serializable
@@ -103,7 +104,8 @@ fun Route.matchDebugRoutes(
         debugPost("/sessions/{id}/export") {
             val id = requireNotNull(call.parameters["id"])
             val capture = coordinator.exportDiagnostics(id)
-            call.respond(capture)
+            val archive = prepareDiagnosticArchive(capture)
+            call.respondTextWriter(ContentType.Application.Json) { archive.writeJson(this) }
         }
         debugGet("/sessions/{id}/stream") {
             val id = requireNotNull(call.parameters["id"])

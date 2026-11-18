@@ -17,8 +17,12 @@ import li.gkd.app.matching.MatchScheduleCommandType
 import li.gkd.app.matching.MatchScheduledRun
 import li.gkd.app.matching.MatchWork
 import li.gkd.app.matching.RuleAvailability
+import li.gkd.app.matching.input.ForegroundIdentity
+import li.gkd.app.matching.input.ForegroundSource
 import li.gkd.app.matching.input.MatchEventKey
 import li.gkd.app.matching.input.MatchEventKind
+import li.gkd.app.matching.input.MatchInput
+import li.gkd.app.matching.input.MatchInputStream
 import li.gkd.app.matching.input.MatchTimingPolicy
 import li.gkd.app.matching.query.MatchNodeReadFailure
 import li.gkd.app.model.ActionResult
@@ -32,6 +36,73 @@ import li.gkd.app.subscription.UsedSubsEntry
 import li.gkd.db.SubsItem
 
 class MatchDiagnosticsTest {
+    @Test
+    fun foregroundConflictAndRecoverySurviveLaterMatchingTraffic() {
+        val diagnostics = MatchDiagnostics()
+        val policy = MatchTimingPolicy()
+        val session = diagnostics.start(policy, capacity = 10)
+        val first = ForegroundIdentity("first", "FirstActivity")
+        val target = ForegroundIdentity("target", "TargetActivity")
+        val inputs = MatchInputStream(first, capture = { true }, record = diagnostics::recordInput)
+
+        inputs.accept(MatchInput.Foreground(ForegroundSource.TaskStack, target), policy)
+        inputs.accept(MatchInput.Foreground(ForegroundSource.Nodes, first, windowId = 11), policy)
+        val rejected = MatchRejectedWindow("first", 11, eventId = 4)
+        diagnostics.entry("consume_event", "source_window_mismatch", rejectedWindow = rejected)
+        inputs.accept(MatchInput.Foreground(ForegroundSource.Nodes, target, windowId = 12), policy)
+        repeat(30) { diagnostics.record(1, MatchStage.Selector, "matches[0]:miss") }
+
+        val capture = diagnostics.export(session.id)
+        assertTrue(capture.keyEvents.none { it.input != null })
+        val (awaiting, conflict, rejection, recovery) = capture.boundaryEvents
+        assertEquals("awaiting_nodes", awaiting.reason)
+        assertEquals("foreground_conflict", conflict.reason)
+        assertEquals(target, conflict.inputDecision?.foreground?.pending)
+        assertEquals(first, conflict.inputDecision?.foreground?.confirmed)
+        assertEquals(
+            MatchInput.Foreground(ForegroundSource.Nodes, first, windowId = 11),
+            conflict.input?.input,
+        )
+        assertEquals(rejected, rejection.rejectedWindow)
+        assertEquals(target, recovery.inputDecision?.foreground?.confirmed)
+        assertEquals(null, recovery.inputDecision?.foreground?.pending)
+        assertEquals(12, (recovery.input?.input as MatchInput.Foreground).windowId)
+    }
+
+    /** Issue 1522: successful reads after recovery must not evict the preceding failures. */
+    @Test
+    fun foregroundFailuresSurviveRecoveryTrafficAndLateFailureStaysInOriginalSession() {
+        val diagnostics = MatchDiagnostics()
+        val session = diagnostics.start(MatchTimingPolicy(), capacity = 10)
+        val task = MatchTaskObservation(1, "onTaskMovedToFront(info)", "app", "Main")
+        diagnostics.record(0, MatchStage.Root, "task_result_applied", taskObservation = task)
+        diagnostics.entry("root_read", "root_unavailable")
+        diagnostics.entry("foreground_confirmation", "foreground_wait_expired")
+        val pending = diagnostics.beginOperation("ActiveWindow")!!
+        repeat(40) {
+            diagnostics.entry("root_read", "root_ready")
+            diagnostics.record(1, MatchStage.Selector, "matches[0]:miss")
+            diagnostics.endOperation(diagnostics.beginOperation("Query"), "not_matched")
+        }
+        diagnostics.stop(session.id)
+        val capture = diagnostics.export(session.id)
+        assertTrue(capture.session.dropped > 0)
+        assertTrue(capture.droppedKeyEvents > 0)
+        assertEquals(
+            listOf("task_result_applied", "root_unavailable", "foreground_wait_expired"),
+            capture.boundaryEvents.map { it.reason },
+        )
+        assertEquals(task, capture.boundaryEvents.first().taskObservation)
+        val next = diagnostics.start(MatchTimingPolicy())
+        diagnostics.endOperation(pending, "java.lang.SecurityException: denied")
+        val previous = diagnostics.export(session.id)
+        assertEquals(
+            "java.lang.SecurityException: denied",
+            previous.boundaryEvents.last().operation?.outcome,
+        )
+        assertTrue(diagnostics.export(next.id).boundaryEvents.isEmpty())
+    }
+
     /**
      * Repeated failures retain their events, but stack collection is bounded and resets per
      * session.
@@ -514,8 +585,13 @@ class MatchDiagnosticsTest {
         // An in-flight query may complete during action cleanup, after Stop.
         diagnostics.registerQuery(session.id, MatchQueryEvidence(query(40)))
         val capture = diagnostics.export(session.id)
-        assertEquals((9L..40L).toList(), capture.queryRecordings.map { it.runId })
+        assertEquals(
+            (9L..40L).toList(),
+            capture.queryRecordings.filter { it.detailsRetained }.map { it.runId },
+        )
         assertEquals(9L, capture.droppedQueryRecordings)
+        assertEquals(41, capture.queryRecordings.size)
+        assertEquals(0L, capture.droppedQuerySummaries)
         assertEquals(
             capture,
             Json.decodeFromString<MatchDiagnosticCapture>(Json.encodeToString(capture)),

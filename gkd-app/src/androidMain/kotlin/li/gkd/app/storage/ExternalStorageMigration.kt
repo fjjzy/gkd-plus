@@ -182,11 +182,9 @@ class ExternalStorageMigration(private val destination: File, private val work: 
                     Files.deleteIfExists(path)
                 }
             }
-        // 标记必须在暂存目录删干净之后再写：marker 一旦落地，下次启动 prepare 会直接返回，
-        // 残留的暂存目录就再也没机会清理。journal 也在 work 内，删成功即无需回滚。
+        marker.createNewFile()
         if (!work.deleteRecursively())
             throw IOException("Cannot clean up storage migration staging")
-        marker.createNewFile()
     }
 
     private fun selection(

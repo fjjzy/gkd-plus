@@ -26,7 +26,7 @@
 - `gkd-app/src/commonMain/kotlin/li/gkd/app/util/AiRuleGenerator.kt` — AI 调用、JSON 提取/解析、规则写入核心
 - `gkd-app/src/commonMain/kotlin/li/gkd/app/util/AiModelCatalogUtils.kt` — 协议/模型选项与展示名
 - `gkd-app/src/commonMain/kotlin/li/gkd/app/feature/settings/AiSettingsDialog.kt` — AI 配置对话框
-- `gkd-app/src/commonMain/composeResources/files/gkd-rule-generator-prompt.md` — 内置提示词
+- `gkd-app/src/commonMain/composeResources/files/gkd-rule-generator-prompt.md` — 内置提示词；2026-11-17 在「快照 JSON 格式」末尾加了「快照为空」的应对约定：可能是厂商系统/应用屏蔽无障碍（如小米对部分应用禁用无障碍、`FLAG_SECURE`、游戏全屏渲染）或截图时机不对，先让用户重截，仍为空则判定被屏蔽、不要凭空生成规则
 
 **改动文件**
 - `gkd-app/src/commonMain/kotlin/li/gkd/app/settings/SettingsStore.kt` — 新增 `AiConfig` 数据类及 `aiEnable` / `aiConfig` 字段

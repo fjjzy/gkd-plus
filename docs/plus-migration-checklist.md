@@ -32,7 +32,7 @@
 - [ ] 重试建议：`RuleNotWorkingSuggestion` 存在，且不再写入 `RETRY_CARD_RULE_NOT_WORKING` 消息
 - [ ] 规则定位：`AiMessage.groupKeys` 在入库时写入，点击「已加入本地规则」使用 `focusGroupKey`
 - [ ] 配置字段：`AiConfig` 10 个字段 + `SettingsStore.aiEnable` / `aiTileDirectPicker`
-- [ ] 提示词一致：`composeResources/files/gkd-rule-generator-prompt.md` 与合并前哈希一致（除非主动修改）
+- [ ] 提示词一致：`composeResources/files/gkd-rule-generator-prompt.md` 2026-11-17 主动修改过（新增「快照为空」的应对说明：可能是系统/应用屏蔽无障碍，先让用户重截，仍空则判定被屏蔽），此后除非再主动修改才需比对哈希
 
 ### UI / 保活
 
@@ -64,7 +64,7 @@
 
 ### 其他
 
-- [ ] 日志脱敏：`LogArchive.build` 对所有进入压缩包的文本（store / db / subscription / log / crash / 附加目录 / 诊断 / 快照）先复制再脱敏，不直接改线上文件
+- [ ] 日志脱敏：`LogArchive.build` 对所有进入压缩包的文本（store / subscription / log / crash / 启动日志 / 附加目录 / 诊断 / 快照 / 特权崩溃 / db 表 JSON）先复制再脱敏，不直接改线上文件；**原始 `gkd.db` / `-wal` / `-shm` 不进包**，上游改为导出 db 表为 JSON
 - [ ] 日志附加快照：`GkShareLogDialog` 有「附加快照记录」选项（天数单选），`createLogArchive(diagnostics, snapshotDays)` 链路通
 - [ ] 备份条目：`SettingsRepository.exportBackupEntries` 含 settings（含 `aiConfig`）、actionCount、block 列表、companionScope、`ai_conversations.json`，恢复时走 `withBackupRestore`
 - [ ] 存储根：`AndroidStorage.storage` 使用 `app.filesDir`；`App.onCreate` 先调 `AndroidStorage.initialize()`

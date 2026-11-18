@@ -24,6 +24,7 @@ import li.gkd.app.network.inspection.DesktopDebugService
 import li.gkd.app.record.RuntimeRecordRepository
 import li.gkd.app.settings.AppScopePolicy
 import li.gkd.app.settings.SettingsRepository
+import li.gkd.app.settings.updateSystemLanguage
 import li.gkd.app.storage.StorageMaintenance
 import li.gkd.app.storage.appStorage
 import li.gkd.app.subscription.RawSubscriptionParser
@@ -72,6 +73,8 @@ class DesktopRuntime(
     }
 
     init {
+        updateSystemLanguage(simulator.settings.value.device.locale)
+        simulator.onLanguageChanged = ::updateSystemLanguage
         LogUtils.i("Desktop runtime started")
     }
 
@@ -148,8 +151,9 @@ class DesktopRuntime(
         val settings = SettingsRepository.settings.value
         val current = simulator.settings.value
         val enabled =
-            settings.enableAutomator &&
-                (current.services.serviceEnabled || current.services.automationRunning) &&
+            settings.useAutomation &&
+                settings.enableAutomator &&
+                current.services.automationRunning &&
                 !AppScopePolicy.blocksCompanion(
                     settings,
                     SettingsRepository.companionScopeAppList.value,
@@ -215,6 +219,7 @@ class DesktopRuntime(
         simulator.onServiceRunningChanged = null
         simulator.onAppCatalogChanged = null
         simulator.onTopAppChanged = null
+        simulator.onLanguageChanged = null
         if (Thread.getDefaultUncaughtExceptionHandler() === crashHandler)
             Thread.setDefaultUncaughtExceptionHandler(
                 previousCrashHandler,

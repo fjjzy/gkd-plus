@@ -82,7 +82,4 @@ object AndroidStorage {
             history[directory]?.await()
         }
     }
-
-    // priv-kt 0.17.x still writes fallback crash reports outside app storage.
-    val privilegeCrashDirectory by lazy { app.getExternalFilesDir("priv-crash") }
 }

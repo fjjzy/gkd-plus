@@ -43,7 +43,6 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -79,14 +78,10 @@ import li.gkd.app.network.AppLinks
 import li.gkd.app.resources.*
 import li.gkd.app.settings.SettingsRepository
 import li.gkd.app.snapshot.SnapshotDisplayMode
+import li.gkd.app.snapshot.SnapshotStore
 import li.gkd.app.state.Loadable
 import li.gkd.app.time.format
 import li.gkd.app.ui.MainViewModel
-import li.gkd.app.ui.navigation.AiConversationRoute
-import li.gkd.app.feature.ai.AiRuleLauncher
-import li.gkd.app.feature.snapshot.GenerateAiRuleDialog
-import li.gkd.app.ui.share.launchUi
-import li.gkd.db.Snapshot
 import li.gkd.app.ui.component.GkAppNameText
 import li.gkd.app.ui.component.GkBatchActionMenuItem
 import li.gkd.app.ui.component.GkCheckbox
@@ -106,10 +101,13 @@ import li.gkd.app.ui.platform.GkBackHandler
 import li.gkd.app.ui.platform.LocalUiHost
 import li.gkd.app.ui.share.ListPlaceholder
 import li.gkd.app.ui.share.launchUi
+import li.gkd.app.feature.ai.AiRuleLauncher
+import li.gkd.app.feature.snapshot.GenerateAiRuleDialog
+import li.gkd.app.ui.navigation.AiConversationRoute
 import li.gkd.app.ui.style.scaffoldPadding
 import li.gkd.app.ui.upload.createSnapshotUploadItem
 import li.gkd.app.util.ToastUtils
-import li.gkd.db.Db
+import li.gkd.db.Snapshot
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
 
@@ -127,6 +125,7 @@ fun SnapshotPage() {
         )
     val vm = viewModel { SnapshotViewModel() }
     val shareProgress by vm.shareProgress.collectAsStateWithLifecycle()
+    var aiRuleRequest by remember { mutableStateOf<Snapshot?>(null) }
 
     val loadableState by vm.uiState.collectAsStateWithLifecycle()
     val settings by SettingsRepository.settings.collectAsStateWithLifecycle()
@@ -149,8 +148,6 @@ fun SnapshotPage() {
     }
 
     val actionRequest by vm.actionRequest.collectAsStateWithLifecycle()
-    var aiRuleRequest by remember { mutableStateOf<Snapshot?>(null) }
-    val aiScope = rememberCoroutineScope()
     val actionSnapshot = actionRequest?.let { request -> snapshots.find { it.id == request.key } }
     val thumbnailVersions = remember { mutableStateMapOf<Long, Int>() }
     val selectionState = vm.selection
@@ -169,7 +166,7 @@ fun SnapshotPage() {
 
     fun showCurrentLinks(targetIds: List<Long>) {
         vm.scope.launchUi {
-            val byId = Db.snapshotDao.query().first().associateBy { it.id }
+            val byId = SnapshotStore.observeSnapshots().first().associateBy { it.id }
             showLinks(targetIds.mapNotNull(byId::get))
         }
     }
@@ -574,17 +571,16 @@ fun SnapshotPage() {
             onGenerateAiRule = { aiRuleRequest = snapshot },
         )
     }
-    aiRuleRequest?.let { snapshot ->
+    aiRuleRequest?.let { target ->
         GenerateAiRuleDialog(
             onDismissRequest = { aiRuleRequest = null },
             onDirectGenerate = {
                 aiRuleRequest = null
-                AiRuleLauncher.directGenerate(snapshot.id, snapshot.appId)
+                AiRuleLauncher.directGenerate(target.id, target.appId)
             },
             onConversationGenerate = {
-                val target = snapshot
                 aiRuleRequest = null
-                aiScope.launchUi {
+                mainVm.scope.launchUi {
                     AiRuleLauncher.ensureConversation(target.id, target.appId)
                     mainVm.navigator.navigate(AiConversationRoute(target.id))
                 }

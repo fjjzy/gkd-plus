@@ -8,6 +8,7 @@ enum class ForegroundSource {
     TaskStack,
     Accessibility,
     Nodes,
+    ActiveWindow,
 }
 
 @Serializable data class ForegroundIdentity(val appId: String, val activityId: String? = null)
@@ -21,6 +22,7 @@ data class ForegroundDecision(
     val task: ForegroundIdentity? = null,
     val nodeAppId: String? = null,
     val appReentered: Boolean = false,
+    val surfaceCovered: Boolean? = null,
 )
 
 @Serializable
@@ -107,7 +109,15 @@ class ForegroundTracker(
 
     @Synchronized
     fun snapshot(): ForegroundDecision =
-        ForegroundDecision(confirmed, pending, reason, false, task, lastNodes)
+        ForegroundDecision(
+            confirmed,
+            pending,
+            reason,
+            false,
+            task,
+            lastNodes,
+            surfaceCovered = surfaceCovered,
+        )
 
     private fun decision(
         reason: ForegroundDecisionReason,
@@ -123,6 +133,24 @@ class ForegroundTracker(
             task,
             lastNodes,
             appReentered,
+            surfaceCovered,
+        )
+    }
+
+    private fun confirm(
+        next: ForegroundIdentity,
+        confirmation: ForegroundDecisionReason,
+    ): ForegroundDecision {
+        val changed = next != confirmed
+        val appReentered = pendingAppReentry && next.appId == confirmed.appId
+        confirmed = next
+        pending = null
+        pendingAppReentry = false
+        if (next.appId != SYSTEM_UI && surfaceCovered != true) surfaceReturn = null
+        return decision(
+            if (appReentered) ForegroundDecisionReason.AppReentered else confirmation,
+            changed,
+            appReentered,
         )
     }
 
@@ -132,6 +160,7 @@ class ForegroundTracker(
         value: ForegroundIdentity,
         policy: MatchTimingPolicy,
         now: Long = nowMillis(),
+        activeRootLauncherAppId: String? = null,
     ): ForegroundDecision {
         if (surfaceCovered == true && value.appId != SYSTEM_UI) {
             if (source == ForegroundSource.TaskStack) task = value
@@ -146,6 +175,14 @@ class ForegroundTracker(
         }
         val sameApp = value.appId == confirmed.appId
         val same = sameApp && (value.activityId == null || value.activityId == confirmed.activityId)
+        if (source == ForegroundSource.ActiveWindow) {
+            val candidate = pending
+            if (candidate != null && candidate.appId != value.appId) {
+                return decision(ForegroundDecisionReason.ForegroundConflict)
+            }
+            val next = if (same) confirmed else value
+            return confirm(next, ForegroundDecisionReason.ActiveWindowConfirmed)
+        }
         if (source != ForegroundSource.Nodes) {
             if (source == ForegroundSource.TaskStack) {
                 val repeatedTask = task == value
@@ -187,6 +224,20 @@ class ForegroundTracker(
         val knownNodeConflictsWithPendingIdentity =
             value.activityId != null && candidate != null && candidate != value
         if (knownNodeConflictsWithPendingIdentity) {
+            // A late launcher event can arrive after the new app is already confirmed.
+            // Keep that Activity when the active root and task still agree on it.
+            if (
+                activeRootLauncherAppId != null &&
+                    candidate.appId == activeRootLauncherAppId &&
+                    pendingSource == ForegroundSource.Accessibility &&
+                    value.appId != activeRootLauncherAppId &&
+                    value == confirmed &&
+                    task?.appId == confirmed.appId
+            ) {
+                pending = null
+                pendingAppReentry = false
+                return decision(ForegroundDecisionReason.StaleObservationDiscarded)
+            }
             return decision(ForegroundDecisionReason.ForegroundConflict)
         }
         if (
@@ -201,19 +252,11 @@ class ForegroundTracker(
                 else if (candidate?.appId == value.appId) {
                     if (candidate.activityId == null) matchingTask ?: candidate else candidate
                 } else matchingTask ?: value
-            val changed = next != confirmed
-            val appReentered = pendingAppReentry && next.appId == confirmed.appId
-            confirmed = next
-            pending = null
-            pendingAppReentry = false
-            if (next.appId != SYSTEM_UI && surfaceCovered != true) surfaceReturn = null
-            return decision(
-                if (appReentered) ForegroundDecisionReason.AppReentered
-                else if (task != null && task?.appId != next.appId)
+            return confirm(
+                next,
+                if (task != null && task?.appId != next.appId)
                     ForegroundDecisionReason.SurfaceConfirmed
                 else ForegroundDecisionReason.NodesConfirmed,
-                changed,
-                appReentered,
             )
         }
         if (!same && candidate == null) {

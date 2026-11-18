@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material.icons.outlined.ArrowDownward
+import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.AutoMode
 import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material.icons.outlined.BrightnessAuto
@@ -79,8 +80,10 @@ import li.gkd.app.ui.icon.ExpandContent as SharedExpandContent
 import li.gkd.app.ui.icon.FlashOff as SharedFlashOff
 import li.gkd.app.ui.icon.FlashOn as SharedFlashOn
 import li.gkd.app.ui.icon.Flowchart as SharedFlowchart
+import li.gkd.app.ui.icon.FrameInspect as SharedFrameInspect
 import li.gkd.app.ui.icon.LinkDiagonal as SharedLinkDiagonal
 import li.gkd.app.ui.icon.Logo as SharedLogo
+import li.gkd.app.ui.icon.NetworkNode as SharedNetworkNode
 import li.gkd.app.ui.icon.PageInfo as SharedPageInfo
 import li.gkd.app.ui.icon.StackedDocuments as SharedStackedDocuments
 import li.gkd.app.ui.icon.TileActivity as SharedTileActivity
@@ -173,6 +176,9 @@ fun getIconDefaultDesc(imageVector: ImageVector): String? =
     }
 
 object GkIcons {
+    val NetworkNode
+        get() = SharedNetworkNode
+
     val Logo
         get() = SharedLogo
 
@@ -341,6 +347,9 @@ object GkIcons {
     val CenterFocusWeak
         get() = Icons.Default.CenterFocusWeak
 
+    val FrameInspect
+        get() = SharedFrameInspect
+
     val AutoMode
         get() = Icons.Outlined.AutoMode
 
@@ -388,6 +397,9 @@ object GkIcons {
 
     val ArrowDownward
         get() = Icons.Outlined.ArrowDownward
+
+    val ArrowUpward
+        get() = Icons.Outlined.ArrowUpward
 
     val Check
         get() = Icons.Outlined.Check

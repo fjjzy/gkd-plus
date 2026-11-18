@@ -1,9 +1,11 @@
 package li.gkd.app.storage
 
 import java.io.File
+import java.io.IOException
 import java.nio.file.Files
 import li.gkd.app.logging.LogUtils
 import li.gkd.app.util.redactSensitiveText
+import li.gkd.db.captureDatabaseLogSnapshot
 
 object LogArchive {
     private val layout
@@ -11,17 +13,33 @@ object LogArchive {
 
     private val redactableExtensions = setOf("json", "txt", "log")
 
-    fun build(
+    suspend fun build(
         metadata: Map<String, () -> String>,
-        additionalDirectories: List<File> = emptyList(),
+        privilegeCrashFiles: List<File> = emptyList(),
         diagnosticDirectories: List<File> = emptyList(),
         snapshotDays: Int = 0,
     ): File {
         val directory = StorageMaintenance.temporaryDirectory(layout)
+        val database = directory.resolve("db")
+        captureDatabaseLogSnapshot().writeJsonFiles(database)
         val metadataDirectory =
             Files.createDirectory(directory.resolve("metadata").toPath()).toFile()
+        val privilegeCrashes = directory.resolve("priv-crash")
+        if (privilegeCrashFiles.isNotEmpty()) {
+            Files.createDirectory(privilegeCrashes.toPath())
+            for (file in privilegeCrashFiles) {
+                val target = privilegeCrashes.resolve(file.name).toPath()
+                try {
+                    Files.copy(file.toPath(), target)
+                } catch (e: IOException) {
+                    Files.deleteIfExists(target)
+                    LogUtils.w("Unable to copy privilege crash report: ${file.name}", e)
+                }
+            }
+        }
+        privilegeCrashes.redactSensitiveFiles()
+        database.redactSensitiveFiles()
 
-        // 导出前抹掉 API Key / Bearer Token：所有进入压缩包的文本都要先复制再脱敏，不能改动线上数据
         val logs = directory.resolve("log")
         LogUtils.copyLogs(logs)
         logs.redactSensitiveFiles()
@@ -29,12 +47,12 @@ object LogArchive {
         val exported =
             buildList {
                 add(logs)
-                listOf(layout.store, layout.db, layout.subscription, layout.crash, layout.startupLog)
+                add(database)
+                // 不打包原始 gkd.db / -wal / -shm：上游改为导出 db 表为 JSON，原始库既无必要也不该外传
+                listOf(layout.store, layout.subscription, layout.crash, layout.startupLog)
                     .filter { it.exists() }
                     .forEach { add(copyForExport(directory, it)) }
-                additionalDirectories
-                    .filter { it.exists() }
-                    .forEach { add(copyForExport(directory, it)) }
+                if (privilegeCrashes.isDirectory) add(privilegeCrashes)
                 exportSnapshots(directory, snapshotDays)?.let(::add)
             }
 

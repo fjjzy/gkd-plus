@@ -1,5 +1,6 @@
 package li.gkd.app.ui.crash
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,15 +41,22 @@ class CrashReportViewModel(
 
     private val initialLoadJob =
         scope.launch(Dispatchers.IO) {
-            appStorage().awaitHistoryMigration(HistoryDirectory.Crash)
-            crashDataState.value = Loadable.Ready(FileCrashStorage.load())
+            crashDataState.value =
+                try {
+                    appStorage().awaitHistoryMigration(HistoryDirectory.Crash)
+                    Loadable.Ready(FileCrashStorage.load())
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Loadable.Failure(e)
+                }
         }
 
     suspend fun deleteCrash(crashData: CrashData) {
         initialLoadJob.join()
-        appStorage().awaitHistoryMigration(HistoryDirectory.Crash)
         val deleted =
             withContext(Dispatchers.IO) {
+                appStorage().awaitHistoryMigration(HistoryDirectory.Crash)
                 FileCrashStorage.delete(crashData)
             }
         if (deleted) {
@@ -65,9 +73,9 @@ class CrashReportViewModel(
 
     suspend fun deleteAllCrashes() {
         initialLoadJob.join()
-        appStorage().awaitHistoryMigration(HistoryDirectory.Crash)
         val deleted =
             withContext(Dispatchers.IO) {
+                appStorage().awaitHistoryMigration(HistoryDirectory.Crash)
                 FileCrashStorage.deleteAll()
             }
         crashDataState.value =
@@ -81,7 +89,6 @@ class CrashReportViewModel(
     }
 
     private suspend fun reloadAfterDeleteFailure() {
-        appStorage().awaitHistoryMigration(HistoryDirectory.Crash)
         crashDataState.value =
             Loadable.Ready(
                 withContext(Dispatchers.IO) { FileCrashStorage.load() },

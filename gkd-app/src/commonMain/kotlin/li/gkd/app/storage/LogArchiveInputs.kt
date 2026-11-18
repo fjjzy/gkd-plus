@@ -10,7 +10,7 @@ import li.gkd.db.MatchDiagnosticRecord
 
 data class LogArchiveInputs(
     val metadata: Map<String, () -> String>,
-    val additionalDirectories: List<File> = emptyList(),
+    val privilegeCrashFiles: List<File> = emptyList(),
 )
 
 expect fun logArchiveInputs(): LogArchiveInputs
@@ -19,21 +19,23 @@ expect fun logArchiveInputs(): LogArchiveInputs
 suspend fun createLogArchive(
     diagnostics: List<MatchDiagnosticRecord> = emptyList(),
     snapshotDays: Int = 0,
-): File =
-    MatchDiagnosticFiles.withSavedFiles {
-        appStorage().awaitHistoryMigration(HistoryDirectory.Log)
-        appStorage().awaitHistoryMigration(HistoryDirectory.Crash)
-        // 附加快照时 LogArchive 会直接读快照目录，同样要等它迁完
-        if (snapshotDays > 0) {
-            appStorage().awaitHistoryMigration(HistoryDirectory.Snapshot)
-        }
+): File {
+    val storage = appStorage()
+    storage.awaitHistoryMigration(HistoryDirectory.Log)
+    storage.awaitHistoryMigration(HistoryDirectory.Crash)
+    // 附加快照时 LogArchive 会直接读快照目录，同样要等它迁完
+    if (snapshotDays > 0) {
+        storage.awaitHistoryMigration(HistoryDirectory.Snapshot)
+    }
+    return MatchDiagnosticFiles.withSavedFiles {
         val inputs = logArchiveInputs()
         val records = diagnostics.ifEmpty { Db.matchDiagnosticRecordDao.observeAll().first() }
         LogArchive.build(
             inputs.metadata +
                 ("log-writer.json" to { JsonUtils.keepingNulls.encodeToString(LogUtils.status()) }),
-            inputs.additionalDirectories,
+            inputs.privilegeCrashFiles,
             records.map { MatchDiagnosticFiles.directory(it) },
             snapshotDays,
         )
     }
+}

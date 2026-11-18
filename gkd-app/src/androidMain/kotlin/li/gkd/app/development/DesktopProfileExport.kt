@@ -216,6 +216,7 @@ object DesktopProfileExport {
                 "excludeFromRecents",
                 "enableBlockA11yAppList",
                 "useCustomNotifText",
+                "useCustomNotifSubtitle",
                 "customNotifTitle",
                 "customNotifText",
                 "enableMatch",
