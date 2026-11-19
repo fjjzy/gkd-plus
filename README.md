@@ -12,8 +12,8 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="gkd-app/src/main/res/mipmap/gkd_white.png">
-    <img src="gkd-app/src/main/res/mipmap/gkd_black.png" width="180" alt="GKD-Plus">
+    <source media="(prefers-color-scheme: dark)" srcset="gkd-android/src/main/res/mipmap/gkd_white.png">
+    <img src="gkd-android/src/main/res/mipmap/gkd_black.png" width="180" alt="GKD-Plus">
   </picture>
 </p>
 
