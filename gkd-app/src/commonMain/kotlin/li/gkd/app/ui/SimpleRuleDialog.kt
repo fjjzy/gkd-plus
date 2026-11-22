@@ -55,6 +55,14 @@ fun SimpleRuleDialog(
                 stringResource(Res.string.simple_rule_example_3_close),
             stringResource(Res.string.simple_rule_example_4_locator) to
                 stringResource(Res.string.simple_rule_example_4_close),
+            stringResource(Res.string.simple_rule_example_5_locator) to
+                stringResource(Res.string.simple_rule_example_5_close),
+            stringResource(Res.string.simple_rule_example_6_locator) to
+                stringResource(Res.string.simple_rule_example_6_close),
+            stringResource(Res.string.simple_rule_example_7_locator) to
+                stringResource(Res.string.simple_rule_example_7_close),
+            stringResource(Res.string.simple_rule_example_8_locator) to
+                stringResource(Res.string.simple_rule_example_8_close),
         )
 
     if (showBoundsHelp) {
@@ -70,13 +78,7 @@ fun SimpleRuleDialog(
                     Modifier.fillMaxWidth()
                         .verticalScroll(rememberScrollState()),
             ) {
-                // 完整说明放在两个输入框上方：输入框自身不再依赖 placeholder 解释格式
-                Text(
-                    text = stringResource(Res.string.simple_rule_locator_format_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
+                // 写法说明收进信息按钮，弹窗本身只留两个输入框
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = stringResource(Res.string.simple_rule_locator_label),
@@ -150,7 +152,7 @@ fun SimpleRuleDialog(
     )
 }
 
-/** 「如何获取 bounds」与「如何快照」放在同一个说明里：看完获取步骤自然会问怎么快照。 */
+/** 填写说明：文字写法、ID、bounds 获取步骤和如何快照都放在这一个弹窗里 */
 @Composable
 private fun SimpleRuleBoundsHelpDialog(onDismiss: () -> Unit) {
     GkAlertDialog(
@@ -161,6 +163,30 @@ private fun SimpleRuleBoundsHelpDialog(onDismiss: () -> Unit) {
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                Text(
+                    text = stringResource(Res.string.simple_rule_syntax_title),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                listOf(
+                        Res.string.simple_rule_syntax_contains,
+                        Res.string.simple_rule_syntax_prefix,
+                        Res.string.simple_rule_syntax_suffix,
+                        Res.string.simple_rule_syntax_exact,
+                        Res.string.simple_rule_syntax_and,
+                        Res.string.simple_rule_syntax_id,
+                        Res.string.simple_rule_syntax_back,
+                    )
+                    .forEach {
+                        Text(
+                            text = stringResource(it),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                Text(
+                    text = stringResource(Res.string.simple_rule_bounds_section),
+                    style = MaterialTheme.typography.titleSmall,
+                )
                 Text(
                     text = stringResource(Res.string.simple_rule_bounds_help_step1),
                     style = MaterialTheme.typography.bodyMedium,

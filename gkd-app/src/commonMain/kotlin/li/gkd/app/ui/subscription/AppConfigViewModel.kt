@@ -36,6 +36,7 @@ import li.gkd.db.SubsItem
 import li.gkd.db.SubscriptionConfigSnapshot
 import li.gkd.db.SubscriptionConfigStore
 import li.gkd.db.SubscriptionIds
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -114,7 +115,7 @@ class AppConfigViewModel(
                 put("name", name)
                 putJsonArray("rules") {
                     addJsonObject {
-                        put("matches", matches)
+                        putJsonArray("matches") { matches.forEach { add(it) } }
                         put("action", action)
                     }
                 }
@@ -146,7 +147,11 @@ class AppConfigViewModel(
                 }
             }
         return when (result) {
-            is SubscriptionEditResult.Success -> null
+            is SubscriptionEditResult.Success -> {
+                // 本地订阅默认关闭，加了规则却不生效；本地订阅不触发耗电确认，可直接打开
+                SubscriptionRepository.requestEnabled(SubscriptionIds.LOCAL, true)
+                null
+            }
             is SubscriptionEditResult.Rejected -> result.reason.messageResource.getSync()
         }
     }
@@ -237,6 +242,31 @@ class AppConfigViewModel(
             RuleSwitchHost.AppRules,
             confirmation,
         )
+
+    /** 只删除本地订阅里的应用规则；远程订阅的规则不可删除，选中了也会被跳过 */
+    suspend fun deleteSelectedLocalGroups(selectedGroups: Set<RuleGroupTarget>): Int {
+        val keys =
+            selectedGroups
+                .filter { it is RuleGroupTarget.App && SubscriptionIds.isLocal(it.subsId) }
+                .mapTo(mutableSetOf()) { it.groupKey }
+        if (keys.isEmpty()) return 0
+        var deletedSize = 0
+        val result =
+            SubscriptionRepository.editSubscription(SubscriptionIds.LOCAL) { subscription ->
+                subscription.editResult {
+                    deletedSize =
+                        removeAppGroups(appId = route.appId, removeAppIfEmpty = true) {
+                                it.key in keys
+                            }
+                            .size
+                    SubscriptionEditResult.Success(Unit)
+                }
+            }
+        if (result is SubscriptionEditResult.Rejected) {
+            error(result.reason.messageResource.getSync())
+        }
+        return deletedSize
+    }
 
     suspend fun buildSelectedGroupsText(selectedGroups: Set<RuleGroupTarget>): String =
         withContext(Dispatchers.Default) {

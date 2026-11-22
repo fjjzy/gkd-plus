@@ -1,13 +1,18 @@
 package li.gkd.app.util
 
 private val simpleRuleBoundsPattern = Regex("""^\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*\d+\s*$""")
+private val simpleRuleShortIdPattern = Regex("""^[A-Za-z_][A-Za-z0-9_]*$""")
+
+/** 李跳跳规则里表示返回键的关闭方式 */
+private const val SIMPLE_RULE_BACK = "GLOBAL_ACTION_BACK"
 
 /**
  * 把简易规则输入转成选择器：
  * - `left,top,right,bottom` 或 `bounds:...` → bounds 匹配
  * - `vid:xxx` / `id:xxx` / `text:xxx` → 显式指定属性
  * - 含 `:id/` 的完整 ID → `[id="..."]`
- * - 其余按文字匹配
+ * - 其余按李跳跳的文字规则：默认包含匹配，`+` 开头、`-` 结尾、`=` 完全相同，`&` 连接多个条件；
+ *   同时比对 text 与 desc，形如短 ID 的词也匹配 vid
  */
 fun simpleRuleSelector(input: String): String? {
     val value = input.trim()
@@ -34,31 +39,51 @@ fun simpleRuleSelector(input: String): String? {
     prefixedValue(value, "text:")?.let {
         return "[text=\"${escapeSelectorValue(it)}\"]"
     }
-    return if (value.contains(":id/")) {
-        "[id=\"${escapeSelectorValue(value)}\"]"
-    } else {
-        "[text=\"${escapeSelectorValue(value)}\"]"
+    if (value.contains(":id/")) {
+        return "[id=\"${escapeSelectorValue(value)}\"]"
+    }
+    val conditions = value.split('&').map { it.trim() }.filter { it.isNotEmpty() }
+    if (conditions.isEmpty()) return null
+    return conditions.joinToString(separator = " && ", prefix = "[", postfix = "]") {
+        if (conditions.size == 1) textCondition(it) else "(${textCondition(it)})"
     }
 }
 
-/** 只有关闭方式为空时才用返回键；否则点击匹配到的关闭控件。 */
+private fun textCondition(term: String): String {
+    val (operator, keyword) =
+        when (term.first().takeIf { term.length > 1 }) {
+            '+' -> "^=" to term.substring(1)
+            '-' -> "$=" to term.substring(1)
+            '=' -> "=" to term.substring(1)
+            else -> "*=" to term
+        }
+    val escaped = escapeSelectorValue(keyword)
+    val parts = mutableListOf("text$operator\"$escaped\"", "desc$operator\"$escaped\"")
+    if (operator == "*=" && simpleRuleShortIdPattern.matches(keyword)) {
+        parts += "vid=\"$escaped\""
+    }
+    return parts.joinToString(" || ")
+}
+
+private fun isSimpleRuleBack(closeLocator: String): Boolean =
+    closeLocator.trim().equals(SIMPLE_RULE_BACK, ignoreCase = true)
+
+/** 关闭方式为空或为 GLOBAL_ACTION_BACK 时用返回键；否则点击匹配到的关闭控件 */
 fun simpleRuleAction(closeLocator: String): String =
-    if (simpleRuleSelector(closeLocator) == null) "back" else "click"
+    if (isSimpleRuleBack(closeLocator) || simpleRuleSelector(closeLocator) == null) "back" else "click"
 
 /**
- * 生成简易规则的 matches：
- * - 只填关闭方式：直接匹配并点击它
- * - 只填定位：匹配弹窗，动作为返回
- * - 都填：点击关闭控件，同时要求它与弹窗定位共享祖先节点（即弹窗确实出现过）
+ * 生成简易规则的 matches（每一条都要在屏幕上找到，最后一条是点击目标）：
+ * - 定位弹窗里的 `&` 拆成多条，表示屏幕上同时出现这几个条件，不要求是同一个控件
+ * - 关闭方式是点击目标，里面的 `&` 仍要求同一个控件满足全部条件
+ * - 只填定位：匹配弹窗，动作为返回；只填关闭方式：直接匹配并点击它
  */
-fun buildSimpleRuleMatches(dialogLocator: String, closeLocator: String): String? {
-    val dialogSelector = simpleRuleSelector(dialogLocator)
-    val closeSelector = simpleRuleSelector(closeLocator)
-    return when {
-        closeSelector == null -> dialogSelector
-        dialogSelector == null -> closeSelector
-        else -> "@$closeSelector <<n * >n $dialogSelector"
-    }
+fun buildSimpleRuleMatches(dialogLocator: String, closeLocator: String): List<String>? {
+    val dialogSelectors =
+        dialogLocator.split('&').mapNotNull { simpleRuleSelector(it) }
+    val closeSelector = if (isSimpleRuleBack(closeLocator)) null else simpleRuleSelector(closeLocator)
+    val matches = dialogSelectors + listOfNotNull(closeSelector)
+    return matches.ifEmpty { null }
 }
 
 fun isInvalidSimpleRuleBounds(input: String): Boolean {

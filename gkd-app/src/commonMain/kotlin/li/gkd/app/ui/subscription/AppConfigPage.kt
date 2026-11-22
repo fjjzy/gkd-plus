@@ -349,6 +349,48 @@ fun AppConfigPage(
                                 onDismiss = dismiss,
                                 onUpdate = updateSelected,
                             )
+                            GkBatchActionMenuItem(
+                                text = stringResource(Res.string.action_delete),
+                                // 远程订阅的规则不能删，只有选中了本地规则才可用
+                                enabled =
+                                    selectedDataSet.any {
+                                        it is RuleGroupTarget.App &&
+                                            SubscriptionIds.isLocal(it.subsId)
+                                    },
+                                onDismiss = dismiss,
+                                onClick = {
+                                    val targets = selectedDataSet
+                                    scope.launchUi {
+                                        if (
+                                            !mainVm.dialogRequests.confirm(
+                                                title = getString(Res.string.rule_delete),
+                                                text =
+                                                    getString(
+                                                        Res.string.rule_groups_delete_confirmation,
+                                                        targets
+                                                            .count {
+                                                                it is RuleGroupTarget.App &&
+                                                                    SubscriptionIds.isLocal(
+                                                                        it.subsId
+                                                                    )
+                                                            }
+                                                            .toString(),
+                                                    ),
+                                                error = true,
+                                            )
+                                        )
+                                            return@launchUi
+                                        val deletedSize = vm.deleteSelectedLocalGroups(targets)
+                                        selectionState.clear()
+                                        ToastUtils.show(
+                                            getString(
+                                                Res.string.rule_groups_deleted_count,
+                                                deletedSize.toString(),
+                                            )
+                                        )
+                                    }
+                                },
+                            )
                         }
                     } else {
                         GkRuleDisplayIconButton(byCategory) {

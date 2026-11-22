@@ -1454,6 +1454,10 @@ object AiRuleGenerator {
                 )
             }
         }
+        // 本地订阅默认关闭，加了规则却不生效；本地订阅不触发耗电确认，可直接打开
+        if (insertedGroupKeys.isNotEmpty()) {
+            SubscriptionRepository.requestEnabled(SubscriptionIds.LOCAL, true)
+        }
         return insertedGroupKeys
     }
 }

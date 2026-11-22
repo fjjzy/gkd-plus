@@ -40,10 +40,13 @@
 - [ ] 保活页是 fork 版：自启动 / 电池优化 / 后台运行 / 锁定任务 / 无障碍开机自启五张卡片；**外加上游 985d160f 的「悬浮窗保活」开关**（`store.enableStatusOverlay`，`StatusService` 是唯一消费者，这个开关是唯一写入方）——Plus 的引导页覆盖上游同名 `KeepAlivePage` 时容易把上游这个开关整段弄丢，合并后要专门确认它还在
 - [ ] 自启动细节：`IntentUtils.kt` 有 `openAutoStartSettingsByRoot`、`isColorOsBrand`、`isMiuiFamily`、`openSystemSettings`；ColorOS 无 Root 时兜底跳系统设置首页（**不能跳应用详情**，OPPO 的应用详情里没有自启动 / 耗电管理入口）
 - [ ] 简易规则：`AppConfigPage.kt` 有 `if (showSimpleRuleDialog) { SimpleRuleDialog(...) }` 渲染块，回调是 `addSimpleRule(dialogLocator, closeLocator)`
-- [ ] 简易规则输入：`SimpleRuleDialog.kt` 有「定位弹窗 / 关闭方式」两个输入框，完整说明直接显示在输入框上方（不依赖浮动 label / placeholder）
-- [ ] 示例切换：「示例（N）」每点一次切换一组，覆盖文字 / 完整 ID / 短 ID / bounds
+- [ ] 简易规则输入：`SimpleRuleDialog.kt` 只有「定位弹窗 / 关闭方式」两个输入框，写法说明收在信息按钮弹出的「填写说明」里，不在输入框上方铺文字
+- [ ] 示例切换：「示例（8）」每点一次切换一组，覆盖包含 / + / = / - / & / GLOBAL_ACTION_BACK / 完整 ID / 短 ID / bounds
+- [ ] 应用规则页批量删除：`AppConfigPage.kt` 长按菜单有「删除」，只对本地订阅规则可用
+- [ ] 自动打开本地订阅：`addSimpleRule` 与 `AiRuleGenerator.insertRuleToSubscription` 写入成功后调用 `requestEnabled(SubscriptionIds.LOCAL, true)`
+- [ ] 李跳跳文字语法：`SimpleRuleSelectors.kt` 文字默认生成 `text*=`/`desc*=`（不是精确 `text=`），`+`/`-`/`=`/`&` 与 `GLOBAL_ACTION_BACK` 生效；`SimpleRuleSelectorsTest` 通过
 - [ ] 首页引导：`DashboardPage.kt` 的「如何使用李跳跳简易规则」步骤是「应用」页 → 选择应用 → 右下角加号 → 「添加简易规则」
-- [ ] 选择器生成：`SimpleRuleSelectors.kt` 的 `buildSimpleRuleMatches` 支持文字 / `vid:` / `id:` / bounds，双输入时生成 `@[关闭] <<n * >n [定位]`
+- [ ] 选择器生成：`SimpleRuleSelectors.kt` 的 `buildSimpleRuleMatches` 返回多条 `matches`：定位弹窗按 `&` 拆成多条，关闭控件放最后；`移动&取消&确定` + `=确定` 生成 4 条
 - [ ] 磁贴教程复用：`AiWorkbenchPage` 用 `GkQsTileTutorialDialog`，简易规则帮助内联 `GkQsTileTutorialContent`，教程内容只有一份
 - [ ] 帮助入口合并：简易规则弹窗只有一个信息入口，bounds 获取步骤与「如何快照？」在同一个弹窗里
 - [ ] 快照详情字段：`AiSnapshotPickerPage.kt` 显示「区域bounds」而不是「区域」
@@ -73,6 +76,7 @@
 - [ ] 迁移收尾：历史目录全部 committed 后才删除外部原件；暂存目录删干净后才写内部 `.gkd` 标记（先写标记会让残留暂存永远清不掉）。`journal.json` 与暂存同在 `external-migration` 内，所以「断点续跑」只在 cleanUp 之前成立——但 cleanUp 先删外部原件再删暂存，两个阶段之间中断也不会用旧 db 覆盖内部
 - [ ] 备份导入校验：缺 `db.json` 必须报错；日志包（`db/gkd.db`、`log/`）提示「这是日志压缩包，不是备份文件」，不能静默导入 subscription 文件
 - [ ] 开机自愈：`BootReceiver` / `fixRestartAutomatorService` 链路存在
+- [ ] 磁贴收起控制栏：`SnapshotTileService` / `ButtonTileService` 调 `performActionCollapseShade`，不要被上游的 `performActionBack` 覆盖回去
 - [ ] 测试迁移：`AiApiUrlTest`、`AiThinkingUtilsTest`、`AiMaxTokensUtilsTest`、`BackupUtilsTest`、`FolderExtTest`
 
 ## 三、一键 grep 检查
@@ -93,6 +97,7 @@ rg -n "contains\(github.ref_name, 'beta'\)" .github/workflows/release.yml
 rg -n "startAutoRule" gkd-app/src/commonMain/kotlin/li/gkd/app/util/AiRuleGenerator.kt
 rg -n "ExternalStorageMigration|awaitHistoryMigration" gkd-app/src/androidMain/kotlin/li/gkd/app/util/AndroidStorage.kt gkd-app/src/commonMain/kotlin/li/gkd/app/storage/AppStorageLayout.kt
 rg -n "BackupIssue.LogArchive|BackupIssue.MissingDatabase|looksLikeLogArchive" gkd-app/src/commonMain/kotlin/li/gkd/app/backup/BackupManager.kt
+rg -n "performActionCollapseShade" gkd-app/src/androidMain/kotlin/li/gkd/app/service/SnapshotTileService.kt gkd-app/src/androidMain/kotlin/li/gkd/app/service/ButtonTileService.kt
 ```
 
 任何一条无输出，就说明对应功能在合并中掉了。

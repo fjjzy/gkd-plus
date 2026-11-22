@@ -1243,23 +1243,39 @@
 <string name="simple_rule_title">Simple rule</string>
 <string name="simple_rule_locator_label">Text / ID / bounds used to locate the dialog</string>
 <string name="simple_rule_close_label">Text / ID / bounds used to close the dialog (leave empty to press back)</string>
-<string name="simple_rule_locator_format_hint">Type text directly; a full ID contains :id/; a short ID starts with vid:; bounds are left,top,right,bottom</string>
 <string name="simple_rule_bounds_invalid">Bounds must be four numbers: left,top,right,bottom</string>
-<string name="simple_rule_bounds_help_open">How to get bounds and snapshots</string>
-<string name="simple_rule_bounds_help_title">How to get bounds and snapshots</string>
+<string name="simple_rule_bounds_help_open">How to fill in</string>
+<string name="simple_rule_bounds_help_title">How to fill in</string>
+<string name="simple_rule_syntax_title">Text syntax</string>
+<string name="simple_rule_syntax_contains">Move: the text contains "Move"</string>
+<string name="simple_rule_syntax_prefix">+Move file: the text starts with "Move file"</string>
+<string name="simple_rule_syntax_suffix">-experience: the text ends with "experience"</string>
+<string name="simple_rule_syntax_exact">=OK: the text is exactly "OK"</string>
+<string name="simple_rule_syntax_and">Move&amp;Cancel&amp;OK: in the dialog locator, all of them must appear on screen, possibly in different components; in the close action, one component must meet every condition</string>
+<string name="simple_rule_syntax_id">ID: a full ID contains :id/; a short ID can be typed directly or as vid:xxx</string>
+<string name="simple_rule_syntax_back">Leave the close action empty or type GLOBAL_ACTION_BACK to press back</string>
+<string name="simple_rule_bounds_section">How to get bounds</string>
 <string name="simple_rule_bounds_help_step1">1. Open "AI rule workbench" → "Snapshots" and tap "Snapshot current screen"</string>
 <string name="simple_rule_bounds_help_step2">2. In the snapshot picker, select the component to locate</string>
 <string name="simple_rule_bounds_help_step3">3. Tap the top-right menu for details and copy "Area bounds"</string>
 <string name="simple_rule_bounds_help_hint">Bounds are four numbers: left,top,right,bottom. They may stop matching after switching devices or resolutions</string>
 <string name="simple_rule_snapshot_help">How to take a snapshot?</string>
-<string name="simple_rule_example_1_locator">Teen mode</string>
-<string name="simple_rule_example_1_close">Got it</string>
-<string name="simple_rule_example_2_locator">com.example:id/dialog_title</string>
-<string name="simple_rule_example_2_close">com.example:id/close</string>
-<string name="simple_rule_example_3_locator">vid:dialog_title</string>
-<string name="simple_rule_example_3_close">vid:close</string>
-<string name="simple_rule_example_4_locator">100,200,900,600</string>
-<string name="simple_rule_example_4_close">820,240,900,300</string>
+<string name="simple_rule_example_1_locator">Update available</string>
+<string name="simple_rule_example_1_close">Later</string>
+<string name="simple_rule_example_2_locator">+Move file</string>
+<string name="simple_rule_example_2_close">=OK</string>
+<string name="simple_rule_example_3_locator">-experience program</string>
+<string name="simple_rule_example_3_close">=No thanks</string>
+<string name="simple_rule_example_4_locator">Move&amp;Cancel&amp;OK</string>
+<string name="simple_rule_example_4_close">=OK</string>
+<string name="simple_rule_example_5_locator">=Daily coupon</string>
+<string name="simple_rule_example_5_close">GLOBAL_ACTION_BACK</string>
+<string name="simple_rule_example_6_locator">com.example:id/dialog_title</string>
+<string name="simple_rule_example_6_close">com.example:id/close</string>
+<string name="simple_rule_example_7_locator">vid:dialog_title</string>
+<string name="simple_rule_example_7_close">tv_close</string>
+<string name="simple_rule_example_8_locator">100,200,900,600</string>
+<string name="simple_rule_example_8_close">820,240,900,300</string>
 <string name="simple_rule_add">Add</string>
 <string name="simple_rule_cancel">Cancel</string>
 <string name="simple_rule_example">Examples (%1$s)</string>

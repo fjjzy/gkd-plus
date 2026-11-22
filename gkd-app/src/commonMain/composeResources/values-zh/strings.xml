@@ -1236,23 +1236,39 @@
 <string name="simple_rule_title">简易规则</string>
 <string name="simple_rule_locator_label">定位弹窗所需要的文字 / ID / bounds</string>
 <string name="simple_rule_close_label">关闭弹窗所需要的文字 / ID / bounds（留空按返回键）</string>
-<string name="simple_rule_locator_format_hint">文字直接输入；完整 ID 含 :id/；短 ID 写 vid:；bounds 写 left,top,right,bottom</string>
 <string name="simple_rule_bounds_invalid">bounds 格式应为 left,top,right,bottom 四个数字</string>
-<string name="simple_rule_bounds_help_open">查看 bounds 和快照的获取方法</string>
-<string name="simple_rule_bounds_help_title">如何获取 bounds 和快照</string>
+<string name="simple_rule_bounds_help_open">查看填写说明</string>
+<string name="simple_rule_bounds_help_title">填写说明</string>
+<string name="simple_rule_syntax_title">文字写法</string>
+<string name="simple_rule_syntax_contains">移动：控件文字里含「移动」就算</string>
+<string name="simple_rule_syntax_prefix">+是否移动：以「是否移动」开头</string>
+<string name="simple_rule_syntax_suffix">-用户体验：以「用户体验」结尾</string>
+<string name="simple_rule_syntax_exact">=确定：文字正好是「确定」</string>
+<string name="simple_rule_syntax_and">移动&amp;取消&amp;确定：定位弹窗时表示屏幕上同时出现这几个，可以是不同控件；写在关闭方式里则要求同一个控件全部满足</string>
+<string name="simple_rule_syntax_id">ID：完整 ID 含 :id/；短 ID 直接写，或写成 vid:xxx</string>
+<string name="simple_rule_syntax_back">关闭方式留空或写 GLOBAL_ACTION_BACK 时按返回键</string>
+<string name="simple_rule_bounds_section">如何获取 bounds</string>
 <string name="simple_rule_bounds_help_step1">1. 先在「AI 规则工作台」→「快照」里点「快照当前界面」</string>
 <string name="simple_rule_bounds_help_step2">2. 进入「快照选择」，选中要定位的组件</string>
 <string name="simple_rule_bounds_help_step3">3. 点右上角查看详情，复制「区域bounds」</string>
 <string name="simple_rule_bounds_help_hint">bounds 是 left,top,right,bottom 四个数字，换设备或分辨率后可能不再匹配</string>
 <string name="simple_rule_snapshot_help">如何快照？</string>
-<string name="simple_rule_example_1_locator">青少年模式</string>
-<string name="simple_rule_example_1_close">我知道了</string>
-<string name="simple_rule_example_2_locator">com.example:id/dialog_title</string>
-<string name="simple_rule_example_2_close">com.example:id/close</string>
-<string name="simple_rule_example_3_locator">vid:dialog_title</string>
-<string name="simple_rule_example_3_close">vid:close</string>
-<string name="simple_rule_example_4_locator">100,200,900,600</string>
-<string name="simple_rule_example_4_close">820,240,900,300</string>
+<string name="simple_rule_example_1_locator">检测到更新</string>
+<string name="simple_rule_example_1_close">以后再</string>
+<string name="simple_rule_example_2_locator">+是否移动文件</string>
+<string name="simple_rule_example_2_close">=确定</string>
+<string name="simple_rule_example_3_locator">-用户体验计划</string>
+<string name="simple_rule_example_3_close">=不参加</string>
+<string name="simple_rule_example_4_locator">移动&amp;取消&amp;确定</string>
+<string name="simple_rule_example_4_close">=确定</string>
+<string name="simple_rule_example_5_locator">=天天神券</string>
+<string name="simple_rule_example_5_close">GLOBAL_ACTION_BACK</string>
+<string name="simple_rule_example_6_locator">com.example:id/dialog_title</string>
+<string name="simple_rule_example_6_close">com.example:id/close</string>
+<string name="simple_rule_example_7_locator">vid:dialog_title</string>
+<string name="simple_rule_example_7_close">tv_close</string>
+<string name="simple_rule_example_8_locator">100,200,900,600</string>
+<string name="simple_rule_example_8_close">820,240,900,300</string>
 <string name="simple_rule_add">添加</string>
 <string name="simple_rule_cancel">取消</string>
 <string name="simple_rule_example">示例（%1$s）</string>

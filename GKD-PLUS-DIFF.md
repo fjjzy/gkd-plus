@@ -123,14 +123,17 @@
 
 在 `应用规则` 页右下角展开按钮中提供「简易规则」入口，填「定位弹窗」和「关闭方式」即可生成一条规则，无需手写选择器；首页另有「如何使用李跳跳简易规则」引导卡片（底部「应用」页 → 选择应用 → 右下角加号 → 「添加简易规则」）。
 
-- 两个输入框都支持：文字、完整 ID（含 `:id/`）、短 ID（`vid:xxx`）、bounds（`left,top,right,bottom` 或 `bounds:` 前缀），值内的 `\` 与 `"` 会转义
+- 两个输入框都支持：文字、完整 ID（含 `:id/`）、短 ID（`vid:xxx`，或直接写 `tv_close` 这类标识符）、bounds（`left,top,right,bottom` 或 `bounds:` 前缀），值内的 `\` 与 `"` 会转义
+- 文字写法对齐李跳跳文档（李跳跳闭源，依据是社区整理的规则格式说明）：默认包含匹配（`text*=`），`+` 开头、`-` 结尾、`=` 完全相同；同时比对 text 与 desc；关闭方式写 `GLOBAL_ACTION_BACK` 等同返回键
+- `&` 的含义与李跳跳不同：定位弹窗里的 `&` 拆成多条 `matches`，表示屏幕上同时出现这几个条件，可以分属不同控件（如 `移动&取消&确定`）；关闭方式里的 `&` 仍要求同一个控件全部满足
 - 只填关闭方式：直接匹配并点击它；只填定位：匹配弹窗，动作为返回键
-- 两个都填：matches 为 `@[关闭] <<n * >n [定位]`，点击关闭控件，同时要求它与弹窗定位共享祖先节点（即弹窗确实出现过）
-- 「示例（4）」按钮循环切换：文字 / 完整 ID / 短 ID / bounds 各一组，每点一次把下一组写入两个输入框
-- 两个输入框上方直接显示完整说明（定位弹窗 / 关闭弹窗所需要的文字、ID、bounds），不依赖点击后才出现的浮动提示；关闭弹窗留空时动作为返回键
-- 第一个输入框旁的信息按钮打开同一份说明：先讲「如何获取 bounds」（快照当前界面 → 快照选择 → 右上角详情复制「区域bounds」），紧接着内联「如何快照？」（复用磁贴教程内容），不再拆成两个独立入口
+- 两个都填：`matches` 依次是定位弹窗的每个条件，最后一条是关闭控件；每条都要在屏幕上找到，点击最后一条命中的控件
+- 「示例（8）」按钮循环切换：包含 / `+` 开头与 `=` 精确 / `-` 结尾 / `&` 多条件 / `GLOBAL_ACTION_BACK` / 完整 ID / 短 ID / bounds 各一组，每点一次把下一组写入两个输入框
+- 弹窗里只放两个输入框；第一个输入框旁的信息按钮打开「填写说明」：文字写法（含 `&` 在两个输入框里含义不同的说明）、ID 写法、返回键写法、如何获取 bounds、如何快照（复用磁贴教程内容）
 - 规则名取定位输入（为空时取关闭输入），追加到本地订阅（`LOCAL_SUBS_ID`）的当前应用下；同名规则自动加 `-2`、`-3` 后缀，不覆盖已有规则
+- 简易规则和 AI 加入规则写进本地订阅后会顺手打开本地订阅（`requestEnabled(LOCAL, true)`），否则默认关闭的本地订阅会让新规则不生效
 - 与同菜单里的「完整规则」（跳转规则编辑页）并列
+- 「应用」页进入某个应用后，长按规则的批量菜单增加「删除」：只删选中项里本地订阅的应用规则，没选中本地规则时不可用（`AppConfigViewModel.deleteSelectedLocalGroups`）
 
 **新增文件**
 - `gkd-app/src/commonMain/kotlin/li/gkd/app/ui/SimpleRuleDialog.kt` — 简易规则弹窗（定位 / 关闭输入、示例回填、bounds 帮助、如何快照）
@@ -180,6 +183,15 @@ Plus 直接采用这套实现，删除原先的占位识别、自动切回外部
 - `gkd-app/src/jvmTest/kotlin/li/gkd/app/backup/BackupImportValidationTest.kt`
 
 > 已被旧版 `.gkd` 误切、内部已有真实数据的设备，官方迁移不会回退外部数据，需要 Root 删标记或恢复备份。
+
+### 14. 磁贴点击后收起控制栏
+
+上游「捕获快照」磁贴靠返回键收起控制栏再截图。ColorOS 17 上返回键收不起控制栏，结果截到的是控制栏本身。Plus 新增 `performActionCollapseShade()`：Android 12+ 先用 `GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE`（无障碍或自动化模式均可），失败或低版本再退回返回键。「捕获快照」和「快照按钮」两个磁贴都改用它。
+
+**改动文件**
+- `gkd-app/src/androidMain/kotlin/li/gkd/app/matching/action/AndroidGlobalActions.kt` — `performActionCollapseShade`
+- `gkd-app/src/androidMain/kotlin/li/gkd/app/priv/AutomationService.kt` — 暴露 `performGlobalAction`
+- `gkd-app/src/androidMain/kotlin/li/gkd/app/service/SnapshotTileService.kt`、`ButtonTileService.kt` — 改用收起控制栏
 
 ---
 
