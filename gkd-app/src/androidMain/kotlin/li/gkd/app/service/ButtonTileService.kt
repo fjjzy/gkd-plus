@@ -2,7 +2,7 @@ package li.gkd.app.service
 
 import kotlinx.coroutines.Dispatchers
 import li.gkd.app.matching.AndroidAutomationSessions
-import li.gkd.app.matching.action.performActionBack
+import li.gkd.app.matching.action.performActionCollapseShade
 import li.gkd.app.app.applicationScope
 import li.gkd.app.settings.SettingsRepository.settings
 import li.gkd.app.ui.share.launchUi
@@ -32,7 +32,7 @@ class ButtonTileService : BaseTileService() {
 private fun collapseQuickSettingsPanel() {
     applicationScope().launchUi(Dispatchers.IO) {
         if (AndroidAutomationSessions.getRoot()?.packageName?.toString() == Constants.systemUiAppId) {
-            performActionBack()
+            performActionCollapseShade()
         }
     }
 }

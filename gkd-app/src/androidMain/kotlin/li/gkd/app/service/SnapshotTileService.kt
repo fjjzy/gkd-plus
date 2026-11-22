@@ -7,7 +7,7 @@ import kotlinx.coroutines.isActive
 import li.gkd.app.appScope
 import li.gkd.app.logging.LogUtils
 import li.gkd.app.matching.AndroidAutomationSessions
-import li.gkd.app.matching.action.performActionBack
+import li.gkd.app.matching.action.performActionCollapseShade
 import li.gkd.app.resources.*
 import li.gkd.app.snapshot.SnapshotCaptureHost
 import li.gkd.app.ui.share.launchUi
@@ -24,7 +24,7 @@ private fun execSnapshot() {
     val service = AndroidAutomationSessions.service
     if (service == null) {
         appScope.launchUi(Dispatchers.IO) {
-            performActionBack()
+            performActionCollapseShade()
             ToastUtils.show(Res.string.service_not_connected.getSync(), forced = true)
         }
         return
@@ -33,7 +33,7 @@ private fun execSnapshot() {
         val oldAppId = AndroidAutomationSessions.getRoot(service)?.packageName?.toString()
 
         if (oldAppId == null) {
-            performActionBack()
+            performActionCollapseShade()
             ToastUtils.show(Res.string.snapshot_root_node_failed.getSync(), forced = true)
             return@launchUi
         }
@@ -59,7 +59,7 @@ private fun execSnapshot() {
                 SnapshotCaptureHost.capture(forcedCropStatusBar = true)
                 break
             } else {
-                performActionBack()
+                performActionCollapseShade()
                 delay(500)
                 if (timeout()) {
                     ToastUtils.show(
@@ -71,7 +71,7 @@ private fun execSnapshot() {
             }
         }
         if (!ok) {
-            performActionBack()
+            performActionCollapseShade()
         }
     }
 }

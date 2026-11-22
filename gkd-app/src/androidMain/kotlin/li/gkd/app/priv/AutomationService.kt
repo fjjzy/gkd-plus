@@ -64,6 +64,8 @@ private constructor(
             privilegeContext.screenshot()
         }
 
+    fun performGlobalAction(action: Int): Boolean = uiAutomation.performGlobalAction(action)
+
     override val windowNodeInfo: AccessibilityNodeInfo?
         get() = uiAutomation.rootInActiveWindow
 
