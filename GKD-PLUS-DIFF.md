@@ -152,17 +152,18 @@
 
 重启后自动写回无障碍服务，避免 ColorOS 等系统移除第三方无障碍条目。
 
-- `BootRestoreReceiver` 监听 `BOOT_COMPLETED` / `QUICKBOOT_POWERON`，在 `enableAutomator && useA11y` 时写回 `enabled_accessibility_services`，带重试与「移除 → 加回」修复
+- Plus 的 `BootRestoreReceiver` 监听 `BOOT_COMPLETED` / `QUICKBOOT_POWERON`，在 `enableAutomator && useA11y` 时写回 `enabled_accessibility_services`，带重试与「移除 → 加回」修复；与上游 `BootReceiver`（`fixRestartAutomatorService`）并存，快速开机广播和重试由这里兜底
 - `PrivilegeContext.ensureWriteSecureSettings()`：Root 走 `grantRuntimePermission`；Shizuku / ADB 绕过 priv-kit 的 `isPermissionRestricted()` 守卫，由特权服务执行一次 `pm grant`。权限持久化后，开机不再依赖特权服务在线
 - 工作模式页文案说明「连接一次特权服务（Shizuku 即可）」
 
 **新增文件**
-- `gkd-app/src/androidMain/kotlin/li/gkd/app/receiver/BootReceiver.kt`
+- `gkd-app/src/androidMain/kotlin/li/gkd/app/receiver/BootReceiver.kt`（上游）
+- `gkd-app/src/androidMain/kotlin/li/gkd/app/receiver/BootRestoreReceiver.kt`（Plus）
 
 **改动文件**
-- `gkd-app/src/main/AndroidManifest.xml` — `RECEIVE_BOOT_COMPLETED` 权限与 receiver
-- `gkd-app/src/commonMain/kotlin/li/gkd/app/priv/PrivilegeContext.kt` — `ensureWriteSecureSettings`
-- `gkd-app/src/main/res/values/strings.xml` — 工作模式说明文案
+- `gkd-android/src/main/AndroidManifest.xml` — `RECEIVE_BOOT_COMPLETED` 权限与两个 receiver
+- `gkd-app/src/androidMain/kotlin/li/gkd/app/priv/PrivilegeContext.kt` — `ensureWriteSecureSettings`
+- `gkd-app/src/commonMain/composeResources/values{-zh,}/strings.xml` — 工作模式说明文案
 
 ### 13. 存储根目录：内部存储 + 一次性迁移
 

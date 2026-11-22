@@ -688,7 +688,7 @@
     <string name="search_no_results">No search results</string>
     <string name="search_no_results_filter_hint">No results. Try adjusting the filters.</string>
     <string name="search_open">Search</string>
-    <string name="secure_settings_permission_description">Allow the app to turn accessibility on and off</string>
+    <string name="secure_settings_permission_description">Granted automatically after connecting the privilege service once (Shizuku is enough); GKD restores accessibility after reboot</string>
     <string name="secure_settings_permission_grant">Grant write secure settings permission permanently</string>
     <string name="secure_settings_permission_granted">Write secure settings permission granted</string>
     <string name="secure_settings_permission_required">Grant write secure settings permission first</string>

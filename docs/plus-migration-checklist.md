@@ -75,7 +75,7 @@
 - [ ] 迁移等待覆盖面：`SnapshotStore` 的 `save` / `getMinSnapshot` / `markUploaded` / `replaceScreenshot` / `delete` / `createArchive` / `createUploadArchive` 各自在 `mutationMutex` 内先 await；`createLogArchive` 在 `snapshotDays > 0` 时也 await 快照目录
 - [ ] 迁移收尾：历史目录全部 committed 后才删除外部原件；暂存目录删干净后才写内部 `.gkd` 标记（先写标记会让残留暂存永远清不掉）。`journal.json` 与暂存同在 `external-migration` 内，所以「断点续跑」只在 cleanUp 之前成立——但 cleanUp 先删外部原件再删暂存，两个阶段之间中断也不会用旧 db 覆盖内部
 - [ ] 备份导入校验：缺 `db.json` 必须报错；日志包（`db/gkd.db`、`log/`）提示「这是日志压缩包，不是备份文件」，不能静默导入 subscription 文件
-- [ ] 开机自愈：`BootReceiver` / `fixRestartAutomatorService` 链路存在
+- [ ] 开机自愈：上游 `BootReceiver` / `fixRestartAutomatorService` 与 Plus `BootRestoreReceiver`（`BOOT_COMPLETED` + `QUICKBOOT_POWERON`、3 次重试）都在，Manifest 两个 receiver 都注册
 - [ ] 磁贴收起控制栏：`SnapshotTileService` / `ButtonTileService` 调 `performActionCollapseShade`，不要被上游的 `performActionBack` 覆盖回去
 - [ ] 测试迁移：`AiApiUrlTest`、`AiThinkingUtilsTest`、`AiMaxTokensUtilsTest`、`BackupUtilsTest`、`FolderExtTest`
 
@@ -98,6 +98,7 @@ rg -n "startAutoRule" gkd-app/src/commonMain/kotlin/li/gkd/app/util/AiRuleGenera
 rg -n "ExternalStorageMigration|awaitHistoryMigration" gkd-app/src/androidMain/kotlin/li/gkd/app/util/AndroidStorage.kt gkd-app/src/commonMain/kotlin/li/gkd/app/storage/AppStorageLayout.kt
 rg -n "BackupIssue.LogArchive|BackupIssue.MissingDatabase|looksLikeLogArchive" gkd-app/src/commonMain/kotlin/li/gkd/app/backup/BackupManager.kt
 rg -n "performActionCollapseShade" gkd-app/src/androidMain/kotlin/li/gkd/app/service/SnapshotTileService.kt gkd-app/src/androidMain/kotlin/li/gkd/app/service/ButtonTileService.kt
+rg -n "BootRestoreReceiver|QUICKBOOT_POWERON" gkd-app/src/androidMain/kotlin/li/gkd/app/receiver gkd-android/src/main/AndroidManifest.xml
 ```
 
 任何一条无输出，就说明对应功能在合并中掉了。
